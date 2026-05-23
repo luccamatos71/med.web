@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { FileText, AlignLeft, StickyNote } from 'lucide-react'
 import type { Material } from '@/types/material'
+import { formatBytes, formatDate } from '@/lib/utils'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -12,16 +13,6 @@ interface MaterialCardProps {
   subjectId: string
   accessToken: string
   onRetry: (materialId: string) => void
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 const iconMap = {
@@ -40,7 +31,7 @@ export function MaterialCard({ material, topicId, subjectId, accessToken, onRetr
 
   function handleCardClick() {
     if (!isReady) return
-    router.push(`/topics/${topicId}/materials/${material.id}`)
+    router.push(`/subjects/${subjectId}/topics/${topicId}/materials/${material.id}`)
   }
 
   function handleRetry(e: React.MouseEvent) {

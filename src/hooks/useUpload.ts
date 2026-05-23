@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import type { Material } from '@/types/material'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -42,6 +42,13 @@ export function useUpload({ accessToken, onUpdate }: UseUploadOptions) {
 
     intervals.current.set(materialId, intervalId)
   }, [accessToken, onUpdate, stopPolling])
+
+  useEffect(() => {
+    return () => {
+      intervals.current.forEach((intervalId) => clearInterval(intervalId))
+      intervals.current.clear()
+    }
+  }, [])
 
   return { startPolling, stopPolling }
 }
