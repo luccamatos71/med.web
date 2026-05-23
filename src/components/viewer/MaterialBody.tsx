@@ -54,11 +54,9 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
     fetch(`${API}/api/v1/materials/${material.id}/presigned-url`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-      .then(r => r.json())
-      .then(data => {
-        if (data.url) setPdfUrl(data.url)
-      })
-      .catch(() => {/* ignore */})
+      .then(r => { if (!r.ok) throw new Error('Failed to get URL'); return r.json() })
+      .then(data => { if (data.url) setPdfUrl(data.url) })
+      .catch(() => { /* silently fail — iframe won't render */ })
   }, [material.id, material.type, material.processing_status, accessToken])
 
   // Restore scroll position after mount (only once)

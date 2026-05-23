@@ -28,6 +28,7 @@ export default function MaterialViewerPage() {
   const [material, setMaterial] = useState<Material | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
+  const [materialError, setMaterialError] = useState(false)
   const [readPosition, setReadPosition] = useState<{ scroll_y?: number; page?: number } | null>(null)
 
   // Ref attached to the scrollable Panel 2 div
@@ -44,7 +45,10 @@ export default function MaterialViewerPage() {
     }
 
     Promise.all([
-      fetch(`${API}/api/v1/materials/${materialId}`, { headers }).then(r => r.json()),
+      fetch(`${API}/api/v1/materials/${materialId}`, { headers }).then(r => {
+        if (!r.ok) throw new Error('Failed to fetch material')
+        return r.json()
+      }),
       fetch(`${API}/api/v1/topics?subject_id=${subjectId}`, { headers }).then(r => r.json()),
       fetch(`${API}/api/v1/materials/${materialId}/read-position`, { headers })
         .then(r => r.ok ? r.json() : null)
@@ -53,6 +57,9 @@ export default function MaterialViewerPage() {
       setMaterial(mat)
       setTopics(Array.isArray(tops) ? tops : [])
       if (pos?.position_data) setReadPosition(pos.position_data)
+      setLoading(false)
+    }).catch(() => {
+      setMaterialError(true)
       setLoading(false)
     })
   }, [session, materialId, subjectId])
@@ -150,7 +157,11 @@ export default function MaterialViewerPage() {
           position: 'relative',
         }}
       >
-        {loading || !material ? (
+        {materialError ? (
+          <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.9375rem', color: 'var(--terracotta-strong)', padding: '32px 48px' }}>
+            Não foi possível carregar o material.
+          </p>
+        ) : loading || !material ? (
           <div>
             <Skeleton style={{ height: 32, width: '60%', marginBottom: 16 }} />
             <Skeleton style={{ height: 400, borderRadius: 8 }} />
