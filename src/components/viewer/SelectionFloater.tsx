@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 
 interface SelectionFloaterProps {
   containerRef: React.RefObject<HTMLElement | null>
+  onAskAbout?: (text: string) => void
+  onSaveDoubt?: (text: string) => void
 }
 
 interface FloaterPosition {
@@ -11,7 +13,7 @@ interface FloaterPosition {
   left: number
 }
 
-export function SelectionFloater({ containerRef }: SelectionFloaterProps) {
+export function SelectionFloater({ containerRef, onAskAbout, onSaveDoubt }: SelectionFloaterProps) {
   const [visible, setVisible] = useState(false)
   const [position, setPosition] = useState<FloaterPosition>({ top: 0, left: 0 })
   const [selectedText, setSelectedText] = useState('')
@@ -61,30 +63,57 @@ export function SelectionFloater({ containerRef }: SelectionFloaterProps) {
   if (!visible) return null
 
   return (
-    <button
+    <div
       data-selection-floater="true"
-      onClick={() => {
-        console.log('Perguntar sobre isso:', selectedText)
-        setVisible(false)
-      }}
       style={{
         position: 'fixed',
         top: position.top,
         left: position.left,
         zIndex: 100,
-        background: 'var(--teal-strong)',
-        color: 'white',
-        fontFamily: 'var(--font-ui)',
-        fontSize: '0.8125rem',
-        padding: '6px 12px',
-        borderRadius: 'var(--radius-m)',
-        border: 'none',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-        boxShadow: '0 2px 8px rgba(28,25,23,0.15)',
+        display: 'flex',
+        gap: 6,
       }}
     >
-      Perguntar sobre isso
-    </button>
+      <button
+        onClick={() => {
+          onAskAbout?.(selectedText)
+          setVisible(false)
+        }}
+        style={{
+          background: 'var(--teal-strong)',
+          color: 'white',
+          fontFamily: 'var(--font-ui)',
+          fontSize: '0.8125rem',
+          padding: '6px 12px',
+          borderRadius: 'var(--radius-m)',
+          border: 'none',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 2px 8px rgba(28,25,23,0.15)',
+        }}
+      >
+        Perguntar sobre isso
+      </button>
+      <button
+        onClick={() => {
+          onSaveDoubt?.(selectedText)
+          setVisible(false)
+        }}
+        style={{
+          background: '#fff',
+          color: 'var(--teal-strong)',
+          fontFamily: 'var(--font-ui)',
+          fontSize: '0.8125rem',
+          padding: '6px 12px',
+          borderRadius: 'var(--radius-m)',
+          border: '1px solid var(--base-edge)',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 2px 8px rgba(28,25,23,0.15)',
+        }}
+      >
+        Salvar como dúvida
+      </button>
+    </div>
   )
 }

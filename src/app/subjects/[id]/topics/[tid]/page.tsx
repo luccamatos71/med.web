@@ -1,16 +1,18 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useSession } from 'next-auth/react'
-import { useParams } from 'next/navigation'
+import { useEffect, useState, useCallback, type ElementType } from 'react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { BookOpen, HelpCircle, Brain } from 'lucide-react'
+
 import { Skeleton } from '@/components/ui/skeleton'
 import { UploadModal } from '@/components/material/UploadModal'
 import { NoteModal } from '@/components/material/NoteModal'
 import { MaterialCard } from '@/components/material/MaterialCard'
 import { useUpload } from '@/hooks/useUpload'
 import type { Material } from '@/types/material'
+import type { Doubt } from '@/types/doubt'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -21,16 +23,50 @@ interface Topic {
   subtopics: Topic[]
 }
 
-function EmptyState({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: ElementType
+  title: string
+  description: string
+}) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-      padding: '32px', border: '1.5px dashed #D4C8BC', borderRadius: '12px',
-      textAlign: 'center',
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+        padding: 32,
+        border: '1.5px dashed #D4C8BC',
+        borderRadius: 12,
+        textAlign: 'center',
+      }}
+    >
       <Icon size={24} strokeWidth={1.25} color="#D4C8BC" />
-      <p style={{ fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)', fontSize: '0.9375rem', fontWeight: 500, color: '#4A3F3A', margin: 0 }}>{title}</p>
-      <p style={{ fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)', fontSize: '0.8125rem', color: '#9B8E84', margin: 0 }}>{description}</p>
+      <p
+        style={{
+          fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)',
+          fontSize: '0.9375rem',
+          fontWeight: 500,
+          color: '#4A3F3A',
+          margin: 0,
+        }}
+      >
+        {title}
+      </p>
+      <p
+        style={{
+          fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)',
+          fontSize: '0.8125rem',
+          color: '#9B8E84',
+          margin: 0,
+        }}
+      >
+        {description}
+      </p>
     </div>
   )
 }
@@ -44,13 +80,15 @@ export default function TopicDetailPage() {
   const [topic, setTopic] = useState<Topic | null>(null)
   const [loading, setLoading] = useState(true)
   const [materials, setMaterials] = useState<Material[]>([])
+  const [doubts, setDoubts] = useState<Doubt[]>([])
+  const [newDoubt, setNewDoubt] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showNoteModal, setShowNoteModal] = useState(false)
 
   const accessToken = (session?.accessToken as string) ?? ''
 
   const handleMaterialUpdate = useCallback((updated: Material) => {
-    setMaterials(prev => prev.map(m => m.id === updated.id ? updated : m))
+    setMaterials((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
   }, [])
 
   const { startPolling } = useUpload({
@@ -58,37 +96,56 @@ export default function TopicDetailPage() {
     onUpdate: handleMaterialUpdate,
   })
 
-  const headers = useCallback(() => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${session?.accessToken}`,
-  }), [session])
+  const headers = useCallback(
+    () => ({
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.accessToken}`,
+    }),
+    [session]
+  )
+
+  const loadDoubts = useCallback(() => {
+    if (!session?.accessToken) return
+    void fetch(`${API}/api/v1/topics/${topicId}/doubts`, { headers: headers() })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Doubt[]) => setDoubts(Array.isArray(data) ? data : []))
+  }, [headers, session, topicId])
 
   useEffect(() => {
     if (!session?.accessToken) return
-    fetch(`${API}/api/v1/topics/${topicId}`, { headers: headers() })
-      .then(r => r.json())
-      .then(data => { setTopic(data); setLoading(false) })
-      .catch(() => { setTopic(null); setLoading(false) })
-  }, [session, topicId, headers])
+    void fetch(`${API}/api/v1/topics/${topicId}`, { headers: headers() })
+      .then((r) => r.json())
+      .then((data) => {
+        setTopic(data)
+        setLoading(false)
+      })
+      .catch(() => {
+        setTopic(null)
+        setLoading(false)
+      })
+  }, [headers, session, topicId])
 
   useEffect(() => {
     if (!session?.accessToken) return
-    fetch(`${API}/api/v1/materials?topic_id=${topicId}`, { headers: headers() })
-      .then(r => r.json())
+    void fetch(`${API}/api/v1/materials?topic_id=${topicId}`, { headers: headers() })
+      .then((r) => r.json())
       .then((data: Material[]) => {
         setMaterials(data)
-        // Start polling for any pending/processing materials
-        data.forEach(m => {
-          if (m.processing_status === 'pending' || m.processing_status === 'processing') {
-            startPolling(m.id)
+        data.forEach((material) => {
+          if (material.processing_status === 'pending' || material.processing_status === 'processing') {
+            startPolling(material.id)
           }
         })
       })
       .catch(() => setMaterials([]))
-  }, [session, topicId, headers, startPolling])
+  }, [headers, session, startPolling, topicId])
+
+  useEffect(() => {
+    loadDoubts()
+  }, [loadDoubts])
 
   function handleMaterialSuccess(material: Material) {
-    setMaterials(prev => [material, ...prev])
+    setMaterials((prev) => [material, ...prev])
     if (material.processing_status === 'pending' || material.processing_status === 'processing') {
       startPolling(material.id)
     }
@@ -100,13 +157,47 @@ export default function TopicDetailPage() {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
-      if (res.ok) {
-        const updated: Material = await res.json()
-        setMaterials(prev => prev.map(m => m.id === materialId ? updated : m))
-        startPolling(materialId)
-      }
+      if (!res.ok) return
+      const updated: Material = await res.json()
+      setMaterials((prev) => prev.map((m) => (m.id === materialId ? updated : m)))
+      startPolling(materialId)
     } catch {
-      // ignore
+      // noop
+    }
+  }
+
+  async function createManualDoubt() {
+    const question = newDoubt.trim()
+    if (!question || !accessToken) return
+    const response = await fetch(`${API}/api/v1/doubts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        topic_id: topicId,
+        question,
+      }),
+    })
+    if (response.ok) {
+      setNewDoubt('')
+      loadDoubts()
+    }
+  }
+
+  async function resolveDoubt(doubtId: string, createFlashcard: boolean) {
+    if (!accessToken) return
+    const response = await fetch(`${API}/api/v1/doubts/${doubtId}/resolve`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ create_flashcard: createFlashcard }),
+    })
+    if (response.ok) {
+      loadDoubts()
     }
   }
 
@@ -123,46 +214,76 @@ export default function TopicDetailPage() {
 
   return (
     <div style={{ padding: '32px 48px' }}>
-      {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
-        <Link href={`/subjects/${subjectId}`} style={{ fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)', fontSize: '0.8125rem', color: '#9B8E84', textDecoration: 'none' }}>
+        <Link
+          href={`/subjects/${subjectId}`}
+          style={{
+            fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)',
+            fontSize: '0.8125rem',
+            color: '#9B8E84',
+            textDecoration: 'none',
+          }}
+        >
           ← Matéria
         </Link>
         {topic.parent_topic_id && (
           <>
             <span style={{ color: '#D4C8BC' }}>›</span>
-            <Link href={`/subjects/${subjectId}/topics/${topic.parent_topic_id}`} style={{ fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)', fontSize: '0.8125rem', color: '#9B8E84', textDecoration: 'none' }}>
+            <Link
+              href={`/subjects/${subjectId}/topics/${topic.parent_topic_id}`}
+              style={{
+                fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)',
+                fontSize: '0.8125rem',
+                color: '#9B8E84',
+                textDecoration: 'none',
+              }}
+            >
               Tópico pai
             </Link>
           </>
         )}
       </div>
 
-      <h1 style={{
-        fontFamily: 'var(--font-cormorant, Georgia, serif)',
-        fontSize: '2.375rem',
-        fontWeight: 400,
-        color: '#1C1917',
-        margin: '0 0 32px',
-      }}>
+      <h1
+        style={{
+          fontFamily: 'var(--font-cormorant, Georgia, serif)',
+          fontSize: '2.375rem',
+          fontWeight: 400,
+          color: '#1C1917',
+          margin: '0 0 32px',
+        }}
+      >
         {topic.name}
       </h1>
 
-      {/* Subtopics (if root topic) */}
       {topic.subtopics.length > 0 && (
         <div style={{ marginBottom: '32px' }}>
-          <h2 style={{ fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)', fontSize: '0.9375rem', fontWeight: 500, color: '#4A3F3A', margin: '0 0 12px' }}>
+          <h2
+            style={{
+              fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)',
+              fontSize: '0.9375rem',
+              fontWeight: 500,
+              color: '#4A3F3A',
+              margin: '0 0 12px',
+            }}
+          >
             Subtópicos
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {topic.subtopics.map(sub => (
+            {topic.subtopics.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/subjects/${subjectId}/topics/${sub.id}`}
                 style={{
-                  display: 'block', padding: '10px 16px', backgroundColor: '#FFFFFF',
-                  border: '1px solid #E8DDD4', borderRadius: '8px',
-                  fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)', fontSize: '0.9375rem', color: '#1C1917', textDecoration: 'none',
+                  display: 'block',
+                  padding: '10px 16px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E8DDD4',
+                  borderRadius: '8px',
+                  fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)',
+                  fontSize: '0.9375rem',
+                  color: '#1C1917',
+                  textDecoration: 'none',
                 }}
               >
                 {sub.name}
@@ -172,19 +293,18 @@ export default function TopicDetailPage() {
         </div>
       )}
 
-      {/* Content grid: materials (left) + dúvidas/flashcards (right) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px', alignItems: 'start' }}>
-        {/* Left column: Materials */}
         <div>
-          {/* Section header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <span style={{
-              fontFamily: 'var(--font-ui)',
-              fontSize: '0.9375rem',
-              fontWeight: 500,
-              color: 'var(--base-ink-soft)',
-              flex: 1,
-            }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.9375rem',
+                fontWeight: 500,
+                color: 'var(--base-ink-soft)',
+                flex: 1,
+              }}
+            >
               Materiais
             </span>
             <button
@@ -223,7 +343,6 @@ export default function TopicDetailPage() {
             </button>
           </div>
 
-          {/* Materials list */}
           {materials.length === 0 ? (
             <EmptyState
               icon={BookOpen}
@@ -232,10 +351,10 @@ export default function TopicDetailPage() {
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {materials.map(m => (
+              {materials.map((material) => (
                 <MaterialCard
-                  key={m.id}
-                  material={m}
+                  key={material.id}
+                  material={material}
                   topicId={topicId}
                   subjectId={subjectId}
                   accessToken={accessToken}
@@ -246,22 +365,149 @@ export default function TopicDetailPage() {
           )}
         </div>
 
-        {/* Right column: Dúvidas + Flashcards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <EmptyState
-            icon={HelpCircle}
-            title="Sem dúvidas"
-            description="Suas dúvidas sobre este tópico aparecerão aqui"
-          />
-          <EmptyState
-            icon={Brain}
-            title="Sem flashcards"
-            description="Flashcards gerados a partir dos seus materiais"
-          />
+          <div
+            style={{
+              backgroundColor: 'var(--base-surface)',
+              border: '1px solid var(--base-edge)',
+              borderRadius: 12,
+              padding: 12,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.75rem',
+                color: 'var(--base-whisper)',
+              }}
+            >
+              Nova dúvida
+            </p>
+            <textarea
+              value={newDoubt}
+              onChange={(event) => setNewDoubt(event.target.value)}
+              placeholder="Escreva sua dúvida..."
+              rows={3}
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.875rem',
+                border: '1px solid var(--base-edge)',
+                borderRadius: 8,
+                padding: 10,
+                resize: 'vertical',
+              }}
+            />
+            <button
+              onClick={() => void createManualDoubt()}
+              style={{
+                alignSelf: 'flex-end',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.8125rem',
+                color: '#fff',
+                backgroundColor: 'var(--teal-strong)',
+                cursor: 'pointer',
+              }}
+            >
+              Salvar dúvida
+            </button>
+          </div>
+
+          {doubts.length === 0 ? (
+            <>
+              <EmptyState
+                icon={HelpCircle}
+                title="Sem dúvidas"
+                description="Suas dúvidas sobre este tópico aparecerão aqui"
+              />
+              <EmptyState
+                icon={Brain}
+                title="Sem flashcards"
+                description="Flashcards gerados a partir dos seus materiais"
+              />
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {doubts.map((doubt) => (
+                <article
+                  key={doubt.id}
+                  style={{
+                    border: '1px solid var(--base-edge)',
+                    borderLeft: `3px solid ${
+                      doubt.status === 'pending' ? 'var(--amber-main)' : 'var(--teal-main)'
+                    }`,
+                    borderRadius: '0 12px 12px 0',
+                    backgroundColor: 'var(--base-surface)',
+                    padding: '10px 12px',
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '0.8125rem',
+                      color: 'var(--base-ink)',
+                      lineHeight: 1.55,
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {doubt.question}
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-ui)',
+                        fontSize: '0.625rem',
+                        color: 'var(--base-whisper)',
+                      }}
+                    >
+                      {doubt.status}
+                    </span>
+                    {doubt.status === 'pending' && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => void resolveDoubt(doubt.id, false)}
+                          style={{
+                            border: 'none',
+                            background: 'none',
+                            color: 'var(--teal-strong)',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-ui)',
+                            fontSize: '0.6875rem',
+                          }}
+                        >
+                          Resolver
+                        </button>
+                        <button
+                          onClick={() => void resolveDoubt(doubt.id, true)}
+                          style={{
+                            border: 'none',
+                            background: 'none',
+                            color: 'var(--teal-strong)',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-ui)',
+                            fontSize: '0.6875rem',
+                          }}
+                        >
+                          Resolver + flashcard
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Modals */}
       {showUploadModal && (
         <UploadModal
           topicId={topicId}

@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useSession } from 'next-auth/react'
-import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+
 import { Skeleton } from '@/components/ui/skeleton'
+import { ChatPanel } from '@/components/viewer/ChatPanel'
 import { MaterialBody } from '@/components/viewer/MaterialBody'
 import { SelectionFloater } from '@/components/viewer/SelectionFloater'
 import type { Material } from '@/types/material'
@@ -30,50 +32,65 @@ export default function MaterialViewerPage() {
   const [loading, setLoading] = useState(true)
   const [materialError, setMaterialError] = useState(false)
   const [readPosition, setReadPosition] = useState<{ scroll_y?: number; page?: number } | null>(null)
+  const [pendingQuestion, setPendingQuestion] = useState<string | undefined>(undefined)
+  const [selectionSavedFlag, setSelectionSavedFlag] = useState<string | null>(null)
 
-  // Ref attached to the scrollable Panel 2 div
   const bodyPanelRef = useRef<HTMLDivElement>(null)
-
   const accessToken = (session?.accessToken as string) ?? ''
 
   useEffect(() => {
     if (!session?.accessToken) return
-
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.accessToken}`,
     }
-
-    Promise.all([
-      fetch(`${API}/api/v1/materials/${materialId}`, { headers }).then(r => {
-        if (!r.ok) throw new Error('Failed to fetch material')
+    void Promise.all([
+      fetch(`${API}/api/v1/materials/${materialId}`, { headers }).then((r) => {
+        if (!r.ok) throw new Error('failed')
         return r.json()
       }),
-      fetch(`${API}/api/v1/topics?subject_id=${subjectId}`, { headers }).then(r => r.json()),
+      fetch(`${API}/api/v1/topics?subject_id=${subjectId}`, { headers }).then((r) => r.json()),
       fetch(`${API}/api/v1/materials/${materialId}/read-position`, { headers })
-        .then(r => r.ok ? r.json() : null)
+        .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
-    ]).then(([mat, tops, pos]) => {
-      setMaterial(mat)
-      setTopics(Array.isArray(tops) ? tops : [])
-      if (pos?.position_data) setReadPosition(pos.position_data)
-      setLoading(false)
-    }).catch(() => {
-      setMaterialError(true)
-      setLoading(false)
-    })
-  }, [session, materialId, subjectId])
+    ])
+      .then(([mat, tops, pos]) => {
+        setMaterial(mat)
+        setTopics(Array.isArray(tops) ? tops : [])
+        if (pos?.position_data) setReadPosition(pos.position_data)
+        setLoading(false)
+      })
+      .catch(() => {
+        setMaterialError(true)
+        setLoading(false)
+      })
+  }, [materialId, session, subjectId])
 
-  // Flatten topics (including subtopics) for sidebar display
   function flattenTopics(topicList: Topic[]): Topic[] {
     const result: Topic[] = []
-    for (const t of topicList) {
-      result.push(t)
-      if (t.subtopics?.length) {
-        result.push(...flattenTopics(t.subtopics))
-      }
+    for (const topic of topicList) {
+      result.push(topic)
+      if (topic.subtopics?.length) result.push(...flattenTopics(topic.subtopics))
     }
     return result
+  }
+
+  async function saveSelectionAsDoubt(selectedText: string) {
+    if (!selectedText || !accessToken) return
+    const response = await fetch(`${API}/api/v1/doubts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        topic_id: topicId,
+        material_id: materialId,
+        question: selectedText,
+      }),
+    })
+    setSelectionSavedFlag(response.ok ? 'Dúvida salva' : 'Falha ao salvar dúvida')
+    setTimeout(() => setSelectionSavedFlag(null), 2000)
   }
 
   const flatTopics = flattenTopics(topics)
@@ -87,7 +104,6 @@ export default function MaterialViewerPage() {
         backgroundColor: 'var(--base-canvas)',
       }}
     >
-      {/* Panel 1: Topic sidebar */}
       <div
         style={{
           width: 220,
@@ -120,12 +136,12 @@ export default function MaterialViewerPage() {
           </>
         ) : (
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {flatTopics.map(t => {
-              const isActive = t.id === topicId
+            {flatTopics.map((topic) => {
+              const isActive = topic.id === topicId
               return (
                 <Link
-                  key={t.id}
-                  href={`/subjects/${subjectId}/topics/${t.id}`}
+                  key={topic.id}
+                  href={`/subjects/${subjectId}/topics/${topic.id}`}
                   style={{
                     display: 'block',
                     padding: '6px 8px',
@@ -138,7 +154,7 @@ export default function MaterialViewerPage() {
                     backgroundColor: isActive ? 'var(--teal-wash)' : 'transparent',
                   }}
                 >
-                  {t.name}
+                  {topic.name}
                 </Link>
               )
             })}
@@ -146,7 +162,6 @@ export default function MaterialViewerPage() {
         )}
       </div>
 
-      {/* Panel 2: Material body — this div is the scroll container */}
       <div
         ref={bodyPanelRef}
         style={{
@@ -158,7 +173,13 @@ export default function MaterialViewerPage() {
         }}
       >
         {materialError ? (
-          <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.9375rem', color: 'var(--terracotta-strong)', padding: '32px 48px' }}>
+          <p
+            style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.9375rem',
+              color: 'var(--terracotta-strong)',
+            }}
+          >
             Não foi possível carregar o material.
           </p>
         ) : loading || !material ? (
@@ -174,34 +195,49 @@ export default function MaterialViewerPage() {
               initialPosition={readPosition}
               panelRef={bodyPanelRef}
             />
-            <SelectionFloater containerRef={bodyPanelRef} />
+            <SelectionFloater
+              containerRef={bodyPanelRef}
+              onAskAbout={(text) => setPendingQuestion(text)}
+              onSaveDoubt={(text) => void saveSelectionAsDoubt(text)}
+            />
+            {selectionSavedFlag && (
+              <p
+                style={{
+                  position: 'fixed',
+                  right: 408,
+                  bottom: 18,
+                  margin: 0,
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: '0.75rem',
+                  color: 'var(--teal-strong)',
+                  backgroundColor: 'var(--base-surface)',
+                  border: '1px solid var(--base-edge)',
+                  borderRadius: 8,
+                  padding: '6px 10px',
+                }}
+              >
+                {selectionSavedFlag}
+              </p>
+            )}
           </>
         )}
       </div>
 
-      {/* Panel 3: Chat stub */}
       <div
         style={{
           width: 380,
           flexShrink: 0,
           backgroundColor: 'var(--base-surface)',
           borderLeft: '1px solid var(--base-edge)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
         }}
       >
-        <p
-          style={{
-            fontFamily: 'var(--font-ui)',
-            fontSize: '0.8125rem',
-            color: 'var(--base-whisper)',
-            textAlign: 'center',
-            padding: 16,
-          }}
-        >
-          Chat disponível em breve
-        </p>
+        <ChatPanel
+          topicId={topicId}
+          materialId={materialId}
+          accessToken={accessToken}
+          pendingQuestion={pendingQuestion}
+          onPendingConsumed={() => setPendingQuestion(undefined)}
+        />
       </div>
     </div>
   )
