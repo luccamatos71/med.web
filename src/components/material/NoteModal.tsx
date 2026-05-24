@@ -16,12 +16,14 @@ interface NoteModalProps {
 export function NoteModal({ topicId, accessToken, onClose, onSuccess }: NoteModalProps) {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const MAX_CHARS = 5000
   const canSave = content.trim().length > 0 && content.length <= MAX_CHARS
 
   async function handleSave() {
     if (!canSave) return
+    setSubmitError(null)
     setLoading(true)
     try {
       const title = 'Nota — ' + content.slice(0, 30).replace(/\n/g, ' ')
@@ -37,6 +39,9 @@ export function NoteModal({ topicId, accessToken, onClose, onSuccess }: NoteModa
         const material: Material = await res.json()
         onSuccess(material)
         onClose()
+      } else {
+        const data = await res.json().catch(() => null) as { detail?: string } | null
+        setSubmitError(data?.detail ?? 'Falha ao salvar nota.')
       }
     } finally {
       setLoading(false)
@@ -102,6 +107,11 @@ export function NoteModal({ topicId, accessToken, onClose, onSuccess }: NoteModa
             }}>
               {content.length.toLocaleString('pt-BR')} / 5.000
             </p>
+            {submitError && (
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--terracotta-strong)', marginTop: 8 }}>
+                {submitError}
+              </p>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button

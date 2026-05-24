@@ -53,7 +53,7 @@ export default function TopicDetailPage() {
     setMaterials(prev => prev.map(m => m.id === updated.id ? updated : m))
   }, [])
 
-  const { startPolling, stopPolling } = useUpload({
+  const { startPolling } = useUpload({
     accessToken,
     onUpdate: handleMaterialUpdate,
   })
@@ -68,6 +68,7 @@ export default function TopicDetailPage() {
     fetch(`${API}/api/v1/topics/${topicId}`, { headers: headers() })
       .then(r => r.json())
       .then(data => { setTopic(data); setLoading(false) })
+      .catch(() => { setTopic(null); setLoading(false) })
   }, [session, topicId, headers])
 
   useEffect(() => {

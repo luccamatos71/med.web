@@ -63,7 +63,13 @@ export default function SubjectsPage() {
     setLoading(false)
   }, [session, headers])
 
-  useEffect(() => { fetchSubjects() }, [fetchSubjects])
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void fetchSubjects()
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [fetchSubjects])
 
   // Redirect to setup if no subjects
   useEffect(() => {

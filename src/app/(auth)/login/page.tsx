@@ -188,6 +188,11 @@ function LoginForm() {
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
+
+        <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.875rem', color: '#9B8E84', fontFamily: 'var(--font-dm-sans, system-ui, sans-serif)' }}>
+          Não tem conta?{' '}
+          <a href="/register" style={{ color: '#0B6E6A', textDecoration: 'none', fontWeight: 500 }}>Criar conta</a>
+        </p>
       </div>
     </div>
   )

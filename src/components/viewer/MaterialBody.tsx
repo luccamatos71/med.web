@@ -1,10 +1,16 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useEffect, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Material } from '@/types/material'
 
 const API = process.env.NEXT_PUBLIC_API_URL
+const PdfMaterialViewer = dynamic(
+  () => import('./PdfMaterialViewer').then(mod => mod.PdfMaterialViewer),
+  { ssr: false },
+)
+const MAX_POLL_FAILURES = 5
 
 interface MaterialBodyProps {
   material: Material
@@ -15,33 +21,51 @@ interface MaterialBodyProps {
 }
 
 export function MaterialBody({ material: initialMaterial, accessToken, initialPosition, panelRef }: MaterialBodyProps) {
-  const [material, setMaterial] = useState<Material>(initialMaterial)
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [polledMaterial, setPolledMaterial] = useState<Material | null>(null)
+  const [pdfState, setPdfState] = useState<{ materialId: string; url: string | null; error: string | null }>({
+    materialId: '',
+    url: null,
+    error: null,
+  })
+  const [pollError, setPollError] = useState<{ materialId: string; message: string } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Keep material in sync when parent passes new one
-  useEffect(() => {
-    setMaterial(initialMaterial)
-  }, [initialMaterial])
+  const material = polledMaterial?.id === initialMaterial.id ? polledMaterial : initialMaterial
+  const activePdfUrl = pdfState.materialId === material.id ? pdfState.url : null
+  const activePdfUrlError = pdfState.materialId === material.id ? pdfState.error : null
+  const activePollError = pollError?.materialId === material.id ? pollError.message : null
 
   // Poll when pending/processing
   useEffect(() => {
     if (material.processing_status !== 'pending' && material.processing_status !== 'processing') return
 
+    let failures = 0
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`${API}/api/v1/materials/${material.id}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
+        if (!res.ok) {
+          failures += 1
+          if (failures >= MAX_POLL_FAILURES) {
+            setPollError({ materialId: material.id, message: 'Não foi possível atualizar o status do material.' })
+            clearInterval(interval)
+          }
+          return
+        }
         if (res.ok) {
+          failures = 0
           const updated: Material = await res.json()
-          setMaterial(updated)
+          setPolledMaterial(updated)
           if (updated.processing_status !== 'pending' && updated.processing_status !== 'processing') {
             clearInterval(interval)
           }
         }
       } catch {
-        // ignore
+        failures += 1
+        if (failures >= MAX_POLL_FAILURES) {
+          setPollError({ materialId: material.id, message: 'Não foi possível atualizar o status do material.' })
+          clearInterval(interval)
+        }
       }
     }, 3000)
 
@@ -55,8 +79,10 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
       headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then(r => { if (!r.ok) throw new Error('Failed to get URL'); return r.json() })
-      .then(data => { if (data.url) setPdfUrl(data.url) })
-      .catch(() => { /* silently fail — iframe won't render */ })
+      .then(data => {
+        if (data.url) setPdfState({ materialId: material.id, url: data.url, error: null })
+      })
+      .catch(() => setPdfState({ materialId: material.id, url: null, error: 'Não foi possível carregar o PDF.' }))
   }, [material.id, material.type, material.processing_status, accessToken])
 
   // Restore scroll position after mount (only once)
@@ -73,6 +99,7 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
   // Scroll save: attach scroll listener to panel
   useEffect(() => {
     const panel = panelRef.current
+    if (material.type === 'pdf') return
     if (!panel) return
 
     function handleScroll() {
@@ -113,6 +140,11 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
         }}>
           Processando material...
         </p>
+        {activePollError && (
+          <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--terracotta-strong)' }}>
+            {activePollError}
+          </p>
+        )}
       </div>
     )
   }
@@ -130,20 +162,17 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
   if (material.type === 'pdf') {
     return (
       <div>
-        <h1 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: '1.75rem',
-          fontWeight: 400,
-          color: 'var(--base-ink)',
-          marginBottom: 16,
-        }}>
-          {material.title}
-        </h1>
-        {pdfUrl ? (
-          <iframe
-            src={pdfUrl}
-            style={{ width: '100%', height: '80vh', border: 'none', borderRadius: 8 }}
+        {activePdfUrlError ? (
+          <p style={{ color: 'var(--terracotta-strong)', fontFamily: 'var(--font-ui)' }}>
+            {activePdfUrlError}
+          </p>
+        ) : activePdfUrl ? (
+          <PdfMaterialViewer
+            materialId={material.id}
             title={material.title}
+            pdfUrl={activePdfUrl}
+            accessToken={accessToken}
+            initialPage={initialPosition?.page}
           />
         ) : (
           <Skeleton style={{ height: '80vh' }} />
@@ -164,15 +193,31 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
       }}>
         {material.title}
       </h1>
-      <div style={{
-        fontFamily: 'var(--font-body)',
-        fontSize: '0.9375rem',
-        lineHeight: 1.8,
-        color: 'var(--base-ink)',
-        whiteSpace: 'pre-wrap',
-      }}>
-        {material.content}
-      </div>
+      {renderTextContent(material.content ?? '')}
+    </div>
+  )
+}
+
+function renderTextContent(content: string) {
+  return (
+    <div style={{
+      fontFamily: 'var(--font-body)',
+      fontSize: '0.9375rem',
+      lineHeight: 1.8,
+      color: 'var(--base-ink)',
+    }}>
+      {content.split('\n').map((line, index) => {
+        if (line.startsWith('### ')) {
+          return <h3 key={index} style={{ fontFamily: 'var(--font-display)', fontWeight: 400 }}>{line.slice(4)}</h3>
+        }
+        if (line.startsWith('## ')) {
+          return <h2 key={index} style={{ fontFamily: 'var(--font-display)', fontWeight: 400 }}>{line.slice(3)}</h2>
+        }
+        if (line.startsWith('# ')) {
+          return <h1 key={index} style={{ fontFamily: 'var(--font-display)', fontWeight: 400 }}>{line.slice(2)}</h1>
+        }
+        return <p key={index} style={{ margin: line ? '0 0 12px' : '0 0 18px', whiteSpace: 'pre-wrap' }}>{line}</p>
+      })}
     </div>
   )
 }

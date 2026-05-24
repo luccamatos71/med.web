@@ -5,13 +5,11 @@ import { FileText, AlignLeft, StickyNote } from 'lucide-react'
 import type { Material } from '@/types/material'
 import { formatBytes, formatDate } from '@/lib/utils'
 
-const API = process.env.NEXT_PUBLIC_API_URL
-
 interface MaterialCardProps {
   material: Material
   topicId: string
   subjectId: string
-  accessToken: string
+  accessToken?: string
   onRetry: (materialId: string) => void
 }
 
@@ -21,7 +19,7 @@ const iconMap = {
   note: StickyNote,
 }
 
-export function MaterialCard({ material, topicId, subjectId, accessToken, onRetry }: MaterialCardProps) {
+export function MaterialCard({ material, topicId, subjectId, onRetry }: MaterialCardProps) {
   const router = useRouter()
   const isReady = material.processing_status === 'ready'
   const isPending = material.processing_status === 'pending' || material.processing_status === 'processing'

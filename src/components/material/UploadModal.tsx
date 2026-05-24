@@ -22,6 +22,7 @@ export function UploadModal({ topicId, accessToken, onClose, onSuccess }: Upload
   const [textTitle, setTextTitle] = useState('')
   const [textContent, setTextContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
@@ -46,6 +47,7 @@ export function UploadModal({ topicId, accessToken, onClose, onSuccess }: Upload
   }
 
   async function handleSubmit() {
+    setSubmitError(null)
     setLoading(true)
     try {
       let res: Response
@@ -73,6 +75,9 @@ export function UploadModal({ topicId, accessToken, onClose, onSuccess }: Upload
         const material: Material = await res.json()
         onSuccess(material)
         onClose()
+      } else {
+        const data = await res.json().catch(() => null) as { detail?: string } | null
+        setSubmitError(data?.detail ?? 'Falha ao enviar material.')
       }
     } finally {
       setLoading(false)
@@ -185,6 +190,11 @@ export function UploadModal({ topicId, accessToken, onClose, onSuccess }: Upload
                 {fileError}
               </p>
             )}
+            {submitError && (
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--terracotta-strong)', marginTop: 8 }}>
+                {submitError}
+              </p>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
               <button
                 onClick={handleSubmit}
@@ -230,6 +240,11 @@ export function UploadModal({ topicId, accessToken, onClose, onSuccess }: Upload
             <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.6875rem', color: 'var(--base-whisper)', marginTop: 4, textAlign: 'right' }}>
               {textContent.length.toLocaleString('pt-BR')} / 100.000
             </p>
+            {submitError && (
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: 'var(--terracotta-strong)', marginTop: 8 }}>
+                {submitError}
+              </p>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
               <button
                 onClick={handleSubmit}

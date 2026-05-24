@@ -4,6 +4,8 @@ import { Cormorant_Garamond, Lora, DM_Sans } from 'next/font/google'
 import { NavSidebar } from '@/components/layout/NavSidebar'
 import { ViewportGuard } from '@/components/layout/ViewportGuard'
 import { SessionProvider } from '@/components/providers/SessionProvider'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
 import "./globals.css"
 
 if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
