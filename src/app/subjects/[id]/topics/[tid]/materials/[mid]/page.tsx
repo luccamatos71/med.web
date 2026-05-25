@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,6 +23,7 @@ interface Topic {
 export default function MaterialViewerPage() {
   const { data: session } = useSession()
   const params = useParams()
+  const searchParams = useSearchParams()
   const subjectId = params.id as string
   const topicId = params.tid as string
   const materialId = params.mid as string
@@ -94,6 +95,10 @@ export default function MaterialViewerPage() {
   }
 
   const flatTopics = flattenTopics(topics)
+  const citedPage = Number(searchParams.get('page'))
+  const initialPosition = Number.isInteger(citedPage) && citedPage > 0
+    ? { ...(readPosition ?? {}), page: citedPage }
+    : readPosition
 
   return (
     <div
@@ -192,7 +197,7 @@ export default function MaterialViewerPage() {
             <MaterialBody
               material={material}
               accessToken={accessToken}
-              initialPosition={readPosition}
+              initialPosition={initialPosition}
               panelRef={bodyPanelRef}
             />
             <SelectionFloater
@@ -232,6 +237,7 @@ export default function MaterialViewerPage() {
         }}
       >
         <ChatPanel
+          subjectId={subjectId}
           topicId={topicId}
           materialId={materialId}
           accessToken={accessToken}

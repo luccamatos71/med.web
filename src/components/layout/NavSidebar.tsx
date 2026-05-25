@@ -3,12 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { LayoutDashboard, BookOpen, RotateCcw, HelpCircle, LogOut } from 'lucide-react'
+import { LayoutDashboard, BookOpen, HelpCircle, LogOut } from 'lucide-react'
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/subjects', icon: BookOpen, label: 'Matérias' },
-  { href: '/review', icon: RotateCcw, label: 'Revisão' },
   { href: '/duvidas', icon: HelpCircle, label: 'Dúvidas' },
 ]
 

@@ -162,6 +162,20 @@ export function MaterialBody({ material: initialMaterial, accessToken, initialPo
   if (material.type === 'pdf') {
     return (
       <div>
+        {material.processing_error && (
+          <p style={{
+            color: 'var(--amber-strong)',
+            backgroundColor: 'var(--amber-wash)',
+            border: '1px solid var(--base-edge)',
+            borderRadius: 6,
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.8125rem',
+            padding: '10px 12px',
+            margin: '0 0 12px',
+          }}>
+            {material.processing_error}
+          </p>
+        )}
         {activePdfUrlError ? (
           <p style={{ color: 'var(--terracotta-strong)', fontFamily: 'var(--font-ui)' }}>
             {activePdfUrlError}

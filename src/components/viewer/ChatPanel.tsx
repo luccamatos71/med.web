@@ -1,11 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useTopicChat } from '@/hooks/useTopicChat'
-import type { ChatMessage } from '@/types/chat'
+import type { ChatMessage, CitedChunk } from '@/types/chat'
 
 interface ChatPanelProps {
+  subjectId: string
   topicId: string
   materialId: string
   accessToken: string
@@ -14,6 +16,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({
+  subjectId,
   topicId,
   materialId,
   accessToken,
@@ -103,6 +106,7 @@ export function ChatPanel({
             key={message.id}
             message={message}
             previousMessage={messages[idx - 1]}
+            subjectId={subjectId}
             onSaveDoubt={async () => {
               if (message.role !== 'assistant') return
               const userMessage = messages[idx - 1]
@@ -118,7 +122,7 @@ export function ChatPanel({
         ))}
 
         {streaming && streamingContent && (
-          <TutorBlock text={streamingContent} sources={streamingSources} />
+          <TutorBlock text={streamingContent} sources={streamingSources} subjectId={subjectId} />
         )}
 
         {errorMessage && (
@@ -229,10 +233,12 @@ export function ChatPanel({
 function MessageBubble({
   message,
   previousMessage,
+  subjectId,
   onSaveDoubt,
 }: {
   message: ChatMessage
   previousMessage?: ChatMessage
+  subjectId: string
   onSaveDoubt: () => void
 }) {
   if (message.role === 'user') {
@@ -295,7 +301,7 @@ function MessageBubble({
           {previousMessage.content}
         </blockquote>
       )}
-      <TutorBlock text={message.content} sources={message.cited_chunks} />
+      <TutorBlock text={message.content} sources={message.cited_chunks} subjectId={subjectId} />
       <div>
         <button
           onClick={onSaveDoubt}
@@ -319,9 +325,11 @@ function MessageBubble({
 function TutorBlock({
   text,
   sources,
+  subjectId,
 }: {
   text: string
-  sources: Array<{ material_title: string; page_number: number | null }>
+  sources: CitedChunk[]
+  subjectId: string
 }) {
   return (
     <div
@@ -356,19 +364,35 @@ function TutorBlock({
       </p>
       {sources.length > 0 && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {sources.map((source, index) => (
-            <span
-              key={`${source.material_title}-${index}`}
-              style={{
-                fontFamily: 'var(--font-ui)',
-                fontSize: '0.6875rem',
-                color: 'var(--base-whisper)',
-              }}
-            >
-              Fonte: <span style={{ color: 'var(--teal-strong)' }}>{source.material_title}</span>
-              {source.page_number ? ` · p.${source.page_number}` : ''}
-            </span>
-          ))}
+          {sources.map((source, index) => {
+            const label = `${source.material_title}${source.page_number ? ` · p.${source.page_number}` : ''}`
+            const sourceStyle = {
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.6875rem',
+              color: 'var(--base-whisper)',
+            }
+            if (source.material_id && source.topic_id) {
+              return (
+                <span key={`${source.material_title}-${index}`} style={sourceStyle}>
+                  Fonte:{' '}
+                  <Link
+                    href={{
+                      pathname: `/subjects/${subjectId}/topics/${source.topic_id}/materials/${source.material_id}`,
+                      query: source.page_number ? { page: source.page_number } : undefined,
+                    }}
+                    style={{ color: 'var(--teal-strong)' }}
+                  >
+                    {label}
+                  </Link>
+                </span>
+              )
+            }
+            return (
+              <span key={`${source.material_title}-${index}`} style={sourceStyle}>
+                Fonte: <span style={{ color: 'var(--teal-strong)' }}>{label}</span>
+              </span>
+            )
+          })}
         </div>
       )}
     </div>

@@ -1,6 +1,8 @@
 export interface CitedChunk {
   chunk_id: string
   material_title: string
+  material_id?: string | null
+  topic_id?: string | null
   page_number: number | null
   snippet: string
 }

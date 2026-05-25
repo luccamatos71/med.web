@@ -145,19 +145,31 @@ export function MaterialCard({ material, topicId, subjectId, onRetry }: Material
 
       {/* Bottom metadata (ready) */}
       {isReady && (
-        <div style={{
-          display: 'flex',
-          gap: 8,
-          fontFamily: 'var(--font-ui)',
-          fontSize: '0.6875rem',
-          color: 'var(--base-whisper)',
-          marginTop: 4,
-        }}>
-          {material.type === 'pdf' && material.file_size_bytes != null && (
-            <span>{formatBytes(material.file_size_bytes)}</span>
+        <>
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.6875rem',
+            color: 'var(--base-whisper)',
+            marginTop: 4,
+          }}>
+            {material.type === 'pdf' && material.file_size_bytes != null && (
+              <span>{formatBytes(material.file_size_bytes)}</span>
+            )}
+            <span>{formatDate(material.created_at)}</span>
+          </div>
+          {material.type === 'pdf' && material.processing_error && (
+            <p style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: 'var(--amber-strong)',
+              margin: '6px 0 0',
+            }}>
+              {material.processing_error}
+            </p>
           )}
-          <span>{formatDate(material.created_at)}</span>
-        </div>
+        </>
       )}
     </div>
   )
