@@ -58,7 +58,7 @@ export function ChatPanel({
     if (!canSubmit) return
     const question = input.trim()
     setInput('')
-    await sendMessage({ question, selectedText: pendingQuestion })
+    await sendMessage({ question, selectedText: pendingQuestion, activeMaterialId: materialId })
     onPendingConsumed?.()
   }
 
@@ -110,10 +110,11 @@ export function ChatPanel({
             onSaveDoubt={async () => {
               if (message.role !== 'assistant') return
               const userMessage = messages[idx - 1]
+              const sourceMaterialId = message.cited_chunks.find((chunk) => chunk.material_id)?.material_id ?? null
               const ok = await saveDoubt({
                 question: userMessage?.role === 'user' ? userMessage.content : message.content,
                 aiAnswer: message.content,
-                materialId,
+                materialId: sourceMaterialId ?? materialId,
               })
               setSavedFlag(ok ? 'Dúvida salva' : 'Falha ao salvar dúvida')
               setTimeout(() => setSavedFlag(null), 2000)

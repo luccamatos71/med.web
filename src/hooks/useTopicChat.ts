@@ -9,6 +9,7 @@ const API = process.env.NEXT_PUBLIC_API_URL
 interface SendMessageInput {
   question: string
   selectedText?: string
+  activeMaterialId?: string
 }
 
 export function useTopicChat(topicId: string, accessToken: string) {
@@ -30,7 +31,7 @@ export function useTopicChat(topicId: string, accessToken: string) {
   }, [topicId, accessToken])
 
   const sendMessage = useCallback(
-    async ({ question, selectedText }: SendMessageInput) => {
+    async ({ question, selectedText, activeMaterialId }: SendMessageInput) => {
       if (!question.trim() || streaming || !accessToken) return
 
       setErrorMessage(null)
@@ -57,6 +58,7 @@ export function useTopicChat(topicId: string, accessToken: string) {
           body: JSON.stringify({
             question,
             selected_text: selectedText ?? null,
+            active_material_id: activeMaterialId ?? null,
           }),
         })
 
