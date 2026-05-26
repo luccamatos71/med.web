@@ -33,6 +33,7 @@ export default function ReviewPage() {
   const [reviewCount, setReviewCount] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
   const [ratingsCount, setRatingsCount] = useState<Record<RatingType, number>>({
     again: 0,
     hard: 0,
@@ -46,6 +47,7 @@ export default function ReviewPage() {
   const loadSession = useCallback(async () => {
     if (!accessToken) return
     setLoading(true)
+    setErrorMessage('')
     try {
       const [subjectsRes, sessionRes] = await Promise.all([
         fetch(`${API}/api/v1/subjects`, {
@@ -60,10 +62,9 @@ export default function ReviewPage() {
           }
         ),
       ])
-      const subjectPayload: SubjectOption[] = subjectsRes.ok ? await subjectsRes.json() : []
-      const sessionPayload: ReviewSession = sessionRes.ok
-        ? await sessionRes.json()
-        : { cards: [], new_count: 0, review_count: 0, total: 0 }
+      if (!subjectsRes.ok || !sessionRes.ok) throw new Error('Review request failed')
+      const subjectPayload: SubjectOption[] = await subjectsRes.json()
+      const sessionPayload: ReviewSession = await sessionRes.json()
       setSubjects(Array.isArray(subjectPayload) ? subjectPayload : [])
       setQueue(sessionPayload.cards ?? [])
       setInitialTotal(sessionPayload.total ?? 0)
@@ -72,6 +73,12 @@ export default function ReviewPage() {
       setRatingsCount({ again: 0, hard: 0, good: 0, easy: 0 })
       setResolvedIds(new Set())
       setRevealed(false)
+    } catch {
+      setQueue([])
+      setInitialTotal(0)
+      setNewCount(0)
+      setReviewCount(0)
+      setErrorMessage('Nao foi possivel carregar a sessao de revisao. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -87,6 +94,7 @@ export default function ReviewPage() {
   async function rateCurrent(rating: RatingType) {
     if (!current || !accessToken) return
     setBusy(true)
+    setErrorMessage('')
     try {
       const response = await fetch(`${API}/api/v1/review/rate`, {
         method: 'POST',
@@ -96,7 +104,7 @@ export default function ReviewPage() {
         },
         body: JSON.stringify({ flashcard_id: current.flashcard_id, rating }),
       })
-      if (!response.ok) return
+      if (!response.ok) throw new Error('Rate request failed')
       const payload = await response.json()
       setRatingsCount((prev) => ({ ...prev, [rating]: prev[rating] + 1 }))
       setRevealed(false)
@@ -115,6 +123,8 @@ export default function ReviewPage() {
         setResolvedIds((prev) => new Set(prev).add(current.flashcard_id))
         setQueue((prev) => prev.slice(1))
       }
+    } catch {
+      setErrorMessage('Nao foi possivel registrar a revisao. Tente novamente.')
     } finally {
       setBusy(false)
     }
@@ -124,8 +134,8 @@ export default function ReviewPage() {
   const progress = initialTotal > 0 ? Math.round((resolvedCount / initialTotal) * 100) : 0
 
   const completion = useMemo(() => {
-    return queue.length === 0 && !loading
-  }, [loading, queue.length])
+    return queue.length === 0 && !loading && !errorMessage
+  }, [errorMessage, loading, queue.length])
 
   return (
     <div style={{ padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -210,7 +220,11 @@ export default function ReviewPage() {
         </span>
       </div>
 
-      {loading ? (
+      {errorMessage ? (
+        <p role="alert" style={{ margin: 0, fontFamily: 'var(--font-ui)', color: 'var(--terracotta-strong)' }}>
+          {errorMessage}
+        </p>
+      ) : loading ? (
         <p style={{ margin: 0, fontFamily: 'var(--font-ui)', color: 'var(--base-whisper)' }}>Carregando sessao...</p>
       ) : completion ? (
         <section

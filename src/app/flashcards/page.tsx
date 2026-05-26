@@ -16,10 +16,12 @@ export default function FlashcardsPage() {
   const [pending, setPending] = useState<Flashcard[]>([])
   const [cards, setCards] = useState<Flashcard[]>([])
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const load = useCallback(async () => {
     if (!accessToken) return
     setLoading(true)
+    setErrorMessage('')
     try {
       const [pendingRes, cardsRes] = await Promise.all([
         fetch(`${API}/api/v1/flashcards/pending`, {
@@ -31,10 +33,17 @@ export default function FlashcardsPage() {
           cache: 'no-store',
         }),
       ])
-      const pendingJson: Flashcard[] = pendingRes.ok ? await pendingRes.json() : []
-      const cardsJson: Flashcard[] = cardsRes.ok ? await cardsRes.json() : []
+      if (!pendingRes.ok || !cardsRes.ok) {
+        throw new Error('Flashcards request failed')
+      }
+      const pendingJson: Flashcard[] = await pendingRes.json()
+      const cardsJson: Flashcard[] = await cardsRes.json()
       setPending(Array.isArray(pendingJson) ? pendingJson : [])
       setCards(Array.isArray(cardsJson) ? cardsJson : [])
+    } catch {
+      setPending([])
+      setCards([])
+      setErrorMessage('Nao foi possivel carregar os flashcards. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -50,12 +59,16 @@ export default function FlashcardsPage() {
   async function approveCard(cardId: string) {
     if (!accessToken) return
     setBusyId(cardId)
+    setErrorMessage('')
     try {
-      await fetch(`${API}/api/v1/flashcards/${cardId}/approve`, {
+      const response = await fetch(`${API}/api/v1/flashcards/${cardId}/approve`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
+      if (!response.ok) throw new Error('Approve request failed')
       await load()
+    } catch {
+      setErrorMessage('Nao foi possivel aprovar o flashcard. Tente novamente.')
     } finally {
       setBusyId(null)
     }
@@ -64,12 +77,16 @@ export default function FlashcardsPage() {
   async function discardCard(cardId: string) {
     if (!accessToken) return
     setBusyId(cardId)
+    setErrorMessage('')
     try {
-      await fetch(`${API}/api/v1/flashcards/${cardId}/discard`, {
+      const response = await fetch(`${API}/api/v1/flashcards/${cardId}/discard`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
+      if (!response.ok) throw new Error('Discard request failed')
       await load()
+    } catch {
+      setErrorMessage('Nao foi possivel descartar o flashcard. Tente novamente.')
     } finally {
       setBusyId(null)
     }
@@ -140,6 +157,14 @@ export default function FlashcardsPage() {
         >
           Aprovacao em lote
         </h2>
+        {errorMessage && (
+          <p
+            role="alert"
+            style={{ margin: 0, fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: 'var(--terracotta-strong)' }}
+          >
+            {errorMessage}
+          </p>
+        )}
         {loading ? (
           <p style={{ margin: 0, fontFamily: 'var(--font-ui)', color: 'var(--base-whisper)' }}>
             Carregando...

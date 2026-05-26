@@ -43,6 +43,7 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
+  const [statusIsError, setStatusIsError] = useState(false)
 
   const headers = useMemo(
     () => ({
@@ -55,23 +56,30 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
   const loadTopics = useCallback(
     async (nextSubjectId: string) => {
       if (!nextSubjectId || !accessToken) return
-      const response = await fetch(`${API}/api/v1/topics?subject_id=${nextSubjectId}`, {
-        headers,
-        cache: 'no-store',
-      })
-      const payload: TopicTreeNode[] = response.ok ? await response.json() : []
-      const flattened: TopicOption[] = []
-      const walk = (items: TopicTreeNode[], prefix = '') => {
-        for (const item of items) {
-          const label = prefix ? `${prefix} > ${item.name}` : item.name
-          flattened.push({ id: item.id, name: label })
-          if (Array.isArray(item.subtopics) && item.subtopics.length > 0) {
-            walk(item.subtopics, label)
+      try {
+        const response = await fetch(`${API}/api/v1/topics?subject_id=${nextSubjectId}`, {
+          headers,
+          cache: 'no-store',
+        })
+        if (!response.ok) throw new Error('Topics request failed')
+        const payload: TopicTreeNode[] = await response.json()
+        const flattened: TopicOption[] = []
+        const walk = (items: TopicTreeNode[], prefix = '') => {
+          for (const item of items) {
+            const label = prefix ? `${prefix} > ${item.name}` : item.name
+            flattened.push({ id: item.id, name: label })
+            if (Array.isArray(item.subtopics) && item.subtopics.length > 0) {
+              walk(item.subtopics, label)
+            }
           }
         }
+        walk(payload)
+        setTopics(flattened)
+      } catch {
+        setTopics([])
+        setStatusIsError(true)
+        setStatusMessage('Nao foi possivel carregar os topicos.')
       }
-      walk(payload)
-      setTopics(flattened)
     },
     [accessToken, headers]
   )
@@ -82,27 +90,30 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
       setLoading(true)
       try {
         const subjectsRes = await fetch(`${API}/api/v1/subjects`, { headers, cache: 'no-store' })
-        const subjectData: SubjectOption[] = subjectsRes.ok ? await subjectsRes.json() : []
+        if (!subjectsRes.ok) throw new Error('Subjects request failed')
+        const subjectData: SubjectOption[] = await subjectsRes.json()
         setSubjects(subjectData)
 
         if (isEdit && flashcardId) {
           const cardRes = await fetch(`${API}/api/v1/flashcards/${flashcardId}`, { headers, cache: 'no-store' })
-          if (cardRes.ok) {
-            const card: Flashcard = await cardRes.json()
-            setFront(card.front)
-            setBack(card.back)
-            setSourceLabel(card.source)
-            const initialSubjectId = card.subject_id ?? ''
-            setSubjectId(initialSubjectId)
-            setTopicId(card.topic_id)
-            if (initialSubjectId) {
-              await loadTopics(initialSubjectId)
-            }
+          if (!cardRes.ok) throw new Error('Flashcard request failed')
+          const card: Flashcard = await cardRes.json()
+          setFront(card.front)
+          setBack(card.back)
+          setSourceLabel(card.source)
+          const initialSubjectId = card.subject_id ?? ''
+          setSubjectId(initialSubjectId)
+          setTopicId(card.topic_id)
+          if (initialSubjectId) {
+            await loadTopics(initialSubjectId)
           }
         } else if (subjectData.length > 0) {
           setSubjectId(subjectData[0].id)
           await loadTopics(subjectData[0].id)
         }
+      } catch {
+        setStatusIsError(true)
+        setStatusMessage('Nao foi possivel carregar os dados do flashcard.')
       } finally {
         setLoading(false)
       }
@@ -115,6 +126,7 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
     if (!front.trim() || !back.trim() || !topicId || !accessToken) return
     setSaving(true)
     setStatusMessage('')
+    setStatusIsError(false)
     try {
       const endpoint = isEdit ? `${API}/api/v1/flashcards/${flashcardId}` : `${API}/api/v1/flashcards`
       const method = isEdit ? 'PATCH' : 'POST'
@@ -128,11 +140,16 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
+        setStatusIsError(true)
         setStatusMessage('Nao foi possivel salvar o flashcard.')
         return
       }
+      setStatusIsError(false)
       setStatusMessage(isEdit ? 'Flashcard atualizado' : 'Flashcard criado')
       setTimeout(() => router.push('/flashcards'), 350)
+    } catch {
+      setStatusIsError(true)
+      setStatusMessage('Nao foi possivel salvar o flashcard.')
     } finally {
       setSaving(false)
     }
@@ -143,6 +160,8 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
     const confirmed = window.confirm('Excluir este flashcard? O historico de revisao sera perdido.')
     if (!confirmed) return
     setSaving(true)
+    setStatusMessage('')
+    setStatusIsError(false)
     try {
       const response = await fetch(`${API}/api/v1/flashcards/${flashcardId}`, {
         method: 'DELETE',
@@ -150,7 +169,13 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
       })
       if (response.ok) {
         router.push('/flashcards')
+      } else {
+        setStatusIsError(true)
+        setStatusMessage('Nao foi possivel excluir o flashcard.')
       }
+    } catch {
+      setStatusIsError(true)
+      setStatusMessage('Nao foi possivel excluir o flashcard.')
     } finally {
       setSaving(false)
     }
@@ -331,7 +356,7 @@ export function FlashcardEditor({ flashcardId }: FlashcardEditorProps) {
                 margin: '4px 0 0',
                 fontFamily: 'var(--font-ui)',
                 fontSize: '0.6875rem',
-                color: 'var(--teal-strong)',
+                color: statusIsError ? 'var(--terracotta-strong)' : 'var(--teal-strong)',
               }}
             >
               {statusMessage}

@@ -85,6 +85,7 @@ export default function TopicDetailPage() {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [flashcardMessage, setFlashcardMessage] = useState('')
+  const [doubtMessage, setDoubtMessage] = useState('')
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false)
 
   const accessToken = (session?.accessToken as string) ?? ''
@@ -190,16 +191,23 @@ export default function TopicDetailPage() {
 
   async function resolveDoubt(doubtId: string, createFlashcard: boolean) {
     if (!accessToken) return
-    const response = await fetch(`${API}/api/v1/doubts/${doubtId}/resolve`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ create_flashcard: createFlashcard }),
-    })
-    if (response.ok) {
+    setDoubtMessage('')
+    try {
+      const response = await fetch(`${API}/api/v1/doubts/${doubtId}/resolve`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ create_flashcard: createFlashcard }),
+      })
+      if (!response.ok) {
+        setDoubtMessage('Nao foi possivel concluir a acao. Tente novamente.')
+        return
+      }
       loadDoubts()
+    } catch {
+      setDoubtMessage('Nao foi possivel concluir a acao. Tente novamente.')
     }
   }
 
@@ -214,14 +222,24 @@ export default function TopicDetailPage() {
     setFlashcardMessage('Gerando...')
     try {
       let queued = 0
+      let failed = 0
       for (const material of readyMaterials) {
-        const response = await fetch(`${API}/api/v1/materials/${material.id}/flashcards/generate`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        if (response.ok) queued += 1
+        try {
+          const response = await fetch(`${API}/api/v1/materials/${material.id}/flashcards/generate`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+          if (response.ok) queued += 1
+          else failed += 1
+        } catch {
+          failed += 1
+        }
       }
-      setFlashcardMessage(`${queued} material(is) enfileirado(s) para gerar flashcards.`)
+      setFlashcardMessage(
+        failed > 0
+          ? `${queued} material(is) enfileirado(s); ${failed} falharam.`
+          : `${queued} material(is) enfileirado(s) para gerar flashcards.`
+      )
     } finally {
       setGeneratingFlashcards(false)
     }
@@ -474,6 +492,20 @@ export default function TopicDetailPage() {
               Salvar dúvida
             </button>
           </div>
+
+          {doubtMessage && (
+            <p
+              role="alert"
+              style={{
+                margin: '0 0 10px',
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.75rem',
+                color: 'var(--terracotta-strong)',
+              }}
+            >
+              {doubtMessage}
+            </p>
+          )}
 
           {doubts.length === 0 ? (
             <>
