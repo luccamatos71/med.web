@@ -157,7 +157,7 @@ export function ChatPanel({
       <form
         onSubmit={handleSubmit}
         style={{
-          padding: '12px 16px',
+          padding: '12px 16px calc(12px + var(--safe-bottom))',
           borderTop: '1px solid var(--base-edge)',
           display: 'flex',
           flexDirection: 'column',

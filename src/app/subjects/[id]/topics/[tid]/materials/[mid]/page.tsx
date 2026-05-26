@@ -104,7 +104,7 @@ export default function MaterialViewerPage() {
     <div
       style={{
         display: 'flex',
-        height: '100vh',
+        height: 'var(--app-vh)',
         overflow: 'hidden',
         backgroundColor: 'var(--base-canvas)',
       }}
@@ -115,7 +115,7 @@ export default function MaterialViewerPage() {
           flexShrink: 0,
           backgroundColor: 'var(--base-surface)',
           borderRight: '1px solid var(--base-edge)',
-          padding: '24px 16px',
+          padding: 'max(24px, var(--safe-top)) 16px max(24px, var(--safe-bottom))',
           overflowY: 'auto',
         }}
       >
@@ -172,7 +172,7 @@ export default function MaterialViewerPage() {
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '32px 48px',
+          padding: 'max(32px, var(--safe-top)) 48px max(32px, var(--safe-bottom))',
           backgroundColor: 'var(--base-canvas)',
           position: 'relative',
         }}
@@ -209,8 +209,8 @@ export default function MaterialViewerPage() {
               <p
                 style={{
                   position: 'fixed',
-                  right: 408,
-                  bottom: 18,
+                  right: 'calc(408px + var(--safe-right))',
+                  bottom: 'max(18px, var(--safe-bottom))',
                   margin: 0,
                   fontFamily: 'var(--font-ui)',
                   fontSize: '0.75rem',

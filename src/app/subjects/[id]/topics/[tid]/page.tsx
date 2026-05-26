@@ -84,6 +84,8 @@ export default function TopicDetailPage() {
   const [newDoubt, setNewDoubt] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showNoteModal, setShowNoteModal] = useState(false)
+  const [flashcardMessage, setFlashcardMessage] = useState('')
+  const [generatingFlashcards, setGeneratingFlashcards] = useState(false)
 
   const accessToken = (session?.accessToken as string) ?? ''
 
@@ -198,6 +200,30 @@ export default function TopicDetailPage() {
     })
     if (response.ok) {
       loadDoubts()
+    }
+  }
+
+  async function generateFlashcardsFromReadyMaterials() {
+    if (!accessToken || generatingFlashcards) return
+    const readyMaterials = materials.filter((material) => material.processing_status === 'ready')
+    if (readyMaterials.length === 0) {
+      setFlashcardMessage('Nenhum material pronto para gerar flashcards.')
+      return
+    }
+    setGeneratingFlashcards(true)
+    setFlashcardMessage('Gerando...')
+    try {
+      let queued = 0
+      for (const material of readyMaterials) {
+        const response = await fetch(`${API}/api/v1/materials/${material.id}/flashcards/generate`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (response.ok) queued += 1
+      }
+      setFlashcardMessage(`${queued} material(is) enfileirado(s) para gerar flashcards.`)
+    } finally {
+      setGeneratingFlashcards(false)
     }
   }
 
@@ -325,6 +351,23 @@ export default function TopicDetailPage() {
               + Adicionar material
             </button>
             <button
+              onClick={() => void generateFlashcardsFromReadyMaterials()}
+              style={{
+                background: 'none',
+                color: 'var(--amber-strong)',
+                border: '1px solid var(--amber-soft)',
+                borderRadius: 'var(--radius-m)',
+                padding: '6px 14px',
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {generatingFlashcards ? 'Gerando...' : 'Gerar flashcards'}
+            </button>
+            <button
               onClick={() => setShowNoteModal(true)}
               style={{
                 background: 'none',
@@ -342,6 +385,18 @@ export default function TopicDetailPage() {
               + Nova nota
             </button>
           </div>
+          {flashcardMessage && (
+            <p
+              style={{
+                margin: '0 0 10px',
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.75rem',
+                color: 'var(--base-whisper)',
+              }}
+            >
+              {flashcardMessage}
+            </p>
+          )}
 
           {materials.length === 0 ? (
             <EmptyState

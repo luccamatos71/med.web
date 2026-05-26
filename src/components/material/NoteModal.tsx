@@ -60,7 +60,7 @@ export function NoteModal({ topicId, accessToken, onClose, onSuccess }: NoteModa
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--base-surface)', borderRadius: 'var(--radius-xl)',
-          width: 480, padding: 32, position: 'relative',
+          width: 480, maxHeight: 'calc(var(--app-vh) - max(32px, var(--safe-top)) - max(32px, var(--safe-bottom)))', overflowY: 'auto', padding: 32, position: 'relative',
         }}
       >
         {/* Header */}

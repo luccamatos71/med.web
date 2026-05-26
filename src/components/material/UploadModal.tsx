@@ -99,7 +99,7 @@ export function UploadModal({ topicId, accessToken, onClose, onSuccess }: Upload
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--base-surface)', borderRadius: 'var(--radius-xl)',
-          width: 520, maxHeight: '80vh', padding: 32, overflowY: 'auto',
+          width: 520, maxHeight: 'calc(var(--app-vh) - max(32px, var(--safe-top)) - max(32px, var(--safe-bottom)))', padding: 32, overflowY: 'auto',
           position: 'relative',
         }}
       >

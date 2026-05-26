@@ -3,12 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { LayoutDashboard, BookOpen, HelpCircle, LogOut } from 'lucide-react'
+import { LayoutDashboard, BookOpen, HelpCircle, Layers3, Repeat2, LogOut } from 'lucide-react'
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/subjects', icon: BookOpen, label: 'Matérias' },
-  { href: '/duvidas', icon: HelpCircle, label: 'Dúvidas' },
+  { href: '/subjects', icon: BookOpen, label: 'Materias' },
+  { href: '/duvidas', icon: HelpCircle, label: 'Duvidas' },
+  { href: '/flashcards', icon: Layers3, label: 'Flashcards' },
+  { href: '/review', icon: Repeat2, label: 'Revisao' },
 ]
 
 export function NavSidebar() {
@@ -26,14 +28,14 @@ export function NavSidebar() {
         top: 0,
         left: 0,
         width: '64px',
-        height: '100vh',
+        height: 'var(--app-vh)',
         backgroundColor: '#0B4F4B',
         zIndex: 50,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        paddingTop: '16px',
-        paddingBottom: '16px',
+        paddingTop: 'max(16px, var(--safe-top))',
+        paddingBottom: 'max(16px, var(--safe-bottom))',
       }}
     >
       {navItems.map(({ href, icon: Icon, label }) => {
@@ -60,10 +62,8 @@ export function NavSidebar() {
         )
       })}
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Logout */}
       <button
         onClick={() => signOut({ callbackUrl: '/login' })}
         aria-label="Sair"

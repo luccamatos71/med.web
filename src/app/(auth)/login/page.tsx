@@ -43,9 +43,9 @@ function LoginForm() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '100vh',
+        minHeight: 'var(--app-vh)',
         backgroundColor: '#F9F5F0',
-        padding: '24px',
+        padding: 'max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left))',
       }}
     >
       <div

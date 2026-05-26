@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import * as Sentry from "@sentry/nextjs"
 import { Cormorant_Garamond, Lora, DM_Sans } from 'next/font/google'
 import { NavSidebar } from '@/components/layout/NavSidebar'
@@ -41,6 +41,19 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: ".med",
   description: "Plataforma de estudos em medicina",
+  applicationName: '.med',
+  appleWebApp: {
+    capable: true,
+    title: '.med',
+    statusBarStyle: 'default',
+  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#F9F5F0',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -49,9 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body style={{ margin: 0 }}>
         <SessionProvider>
           <ViewportGuard>
-            <div style={{ display: 'flex', minHeight: '100vh' }}>
+            <div style={{ display: 'flex', minHeight: 'var(--app-vh)' }}>
               <NavSidebar />
-              <main style={{ marginLeft: '64px', flex: 1, minHeight: '100vh', backgroundColor: '#F9F5F0' }}>
+              <main style={{ marginLeft: '64px', flex: 1, minHeight: 'var(--app-vh)', backgroundColor: '#F9F5F0' }}>
                 {children}
               </main>
             </div>

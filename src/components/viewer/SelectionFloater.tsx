@@ -23,7 +23,7 @@ export function SelectionFloater({ containerRef, onAskAbout, onSaveDoubt }: Sele
     const container = containerRef.current
     if (!container) return
 
-    function handleMouseUp() {
+    function updateFromSelection() {
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
         const selection = window.getSelection()
@@ -32,30 +32,50 @@ export function SelectionFloater({ containerRef, onAskAbout, onSaveDoubt }: Sele
           setVisible(false)
           return
         }
+
         const range = selection.getRangeAt(0)
+        const commonNode = range.commonAncestorContainer
+        const liveContainer = containerRef.current
+        if (!liveContainer || !liveContainer.contains(commonNode)) {
+          setVisible(false)
+          return
+        }
+
         const rect = range.getBoundingClientRect()
+        if (rect.width === 0 && rect.height === 0) {
+          setVisible(false)
+          return
+        }
+
+        const centeredLeft = rect.left + rect.width / 2
         setSelectedText(text)
         setPosition({
-          top: rect.top - 40,
-          left: rect.left + rect.width / 2 - 80,
+          top: Math.max(8, rect.top - 52),
+          left: Math.max(24, Math.min(window.innerWidth - 24, centeredLeft)),
         })
         setVisible(true)
       }, 150)
     }
 
-    function handleMouseDown(e: MouseEvent) {
+    function hideIfOutside(e: Event) {
       // Hide floater unless clicking the floater button itself
-      const target = e.target as HTMLElement
-      if (target.closest('[data-selection-floater]')) return
+      const target = e.target
+      if (target instanceof Element && target.closest('[data-selection-floater]')) return
       setVisible(false)
     }
 
-    container.addEventListener('mouseup', handleMouseUp)
-    document.addEventListener('mousedown', handleMouseDown)
+    container.addEventListener('mouseup', updateFromSelection)
+    container.addEventListener('touchend', updateFromSelection)
+    document.addEventListener('selectionchange', updateFromSelection)
+    document.addEventListener('mousedown', hideIfOutside)
+    document.addEventListener('touchstart', hideIfOutside, { passive: true })
 
     return () => {
-      container.removeEventListener('mouseup', handleMouseUp)
-      document.removeEventListener('mousedown', handleMouseDown)
+      container.removeEventListener('mouseup', updateFromSelection)
+      container.removeEventListener('touchend', updateFromSelection)
+      document.removeEventListener('selectionchange', updateFromSelection)
+      document.removeEventListener('mousedown', hideIfOutside)
+      document.removeEventListener('touchstart', hideIfOutside)
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [containerRef])
@@ -69,6 +89,7 @@ export function SelectionFloater({ containerRef, onAskAbout, onSaveDoubt }: Sele
         position: 'fixed',
         top: position.top,
         left: position.left,
+        transform: 'translateX(-50%)',
         zIndex: 100,
         display: 'flex',
         gap: 6,
