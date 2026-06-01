@@ -1,10 +1,11 @@
 'use client'
 
-import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useTopicChat } from '@/hooks/useTopicChat'
-import type { ChatMessage, CitedChunk } from '@/types/chat'
+import { useAssistant } from '@/hooks/useAssistant'
+import { AssistantAnswer } from '@/components/assistant/AssistantAnswer'
+
+const API = process.env.NEXT_PUBLIC_API_URL
 
 interface ChatPanelProps {
   subjectId: string
@@ -15,8 +16,12 @@ interface ChatPanelProps {
   onPendingConsumed?: () => void
 }
 
+/**
+ * In-material chat panel. Same assistant brain as the /assistente tab — it just
+ * opens (or continues) the conversation bound to this material, passing the
+ * material as active context so retrieval prioritises it.
+ */
 export function ChatPanel({
-  subjectId,
   topicId,
   materialId,
   accessToken,
@@ -29,38 +34,78 @@ export function ChatPanel({
     streamingContent,
     streamingSources,
     errorMessage,
+    loadMessages,
+    getOrCreateMaterialConversation,
     sendMessage,
-    loadHistory,
-    saveDoubt,
-  } = useTopicChat(topicId, accessToken)
+  } = useAssistant(accessToken)
+
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [savedFlag, setSavedFlag] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    void loadHistory()
-  }, [loadHistory])
+    if (!accessToken || !materialId) return
+    let cancelled = false
+    void getOrCreateMaterialConversation(materialId).then((conversation) => {
+      if (cancelled || !conversation) return
+      setConversationId(conversation.id)
+      void loadMessages(conversation.id)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, materialId, getOrCreateMaterialConversation, loadMessages])
 
   useEffect(() => {
-    if (!pendingQuestion) return
-    inputRef.current?.focus()
+    if (pendingQuestion) inputRef.current?.focus()
   }, [pendingQuestion])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
 
-  const canSubmit = useMemo(() => input.trim().length > 0 && !streaming, [input, streaming])
+  const canSubmit = useMemo(
+    () => input.trim().length > 0 && !streaming && !!conversationId,
+    [input, streaming, conversationId]
+  )
 
-  const handleSubmit = async (event?: React.FormEvent) => {
-    event?.preventDefault()
-    if (!canSubmit) return
-    const question = input.trim()
-    setInput('')
-    await sendMessage({ question, selectedText: pendingQuestion, activeMaterialId: materialId })
-    onPendingConsumed?.()
-  }
+  const handleSubmit = useCallback(
+    async (event?: React.FormEvent) => {
+      event?.preventDefault()
+      if (!canSubmit || !conversationId) return
+      const question = input.trim()
+      setInput('')
+      await sendMessage({
+        conversationId,
+        question,
+        activeMaterialId: materialId,
+        selectedText: pendingQuestion ?? null,
+      })
+      onPendingConsumed?.()
+    },
+    [canSubmit, conversationId, input, materialId, pendingQuestion, sendMessage, onPendingConsumed]
+  )
+
+  const saveDoubt = useCallback(
+    async (question: string, aiAnswer: string) => {
+      if (!accessToken) return
+      const res = await fetch(`${API}/api/v1/doubts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          topic_id: topicId,
+          question,
+          ai_answer: aiAnswer,
+          material_id: materialId,
+        }),
+      })
+      setSavedFlag(res.ok ? 'Dúvida salva' : 'Falha ao salvar dúvida')
+      setTimeout(() => setSavedFlag(null), 2000)
+    },
+    [accessToken, topicId, materialId]
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -74,7 +119,7 @@ export function ChatPanel({
           color: 'var(--base-ink)',
         }}
       >
-        Tutor
+        Assistente
       </div>
 
       <div
@@ -84,7 +129,7 @@ export function ChatPanel({
           padding: '16px 20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
+          gap: 16,
         }}
       >
         {messages.length === 0 && !streaming && (
@@ -97,33 +142,78 @@ export function ChatPanel({
               marginTop: 24,
             }}
           >
-            Faça uma pergunta sobre os materiais deste tópico.
+            Pergunte sobre este material ou qualquer outra coisa.
           </p>
         )}
 
-        {messages.map((message, idx) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            previousMessage={messages[idx - 1]}
-            subjectId={subjectId}
-            onSaveDoubt={async () => {
-              if (message.role !== 'assistant') return
-              const userMessage = messages[idx - 1]
-              const sourceMaterialId = message.cited_chunks.find((chunk) => chunk.material_id)?.material_id ?? null
-              const ok = await saveDoubt({
-                question: userMessage?.role === 'user' ? userMessage.content : message.content,
-                aiAnswer: message.content,
-                materialId: sourceMaterialId ?? materialId,
-              })
-              setSavedFlag(ok ? 'Dúvida salva' : 'Falha ao salvar dúvida')
-              setTimeout(() => setSavedFlag(null), 2000)
-            }}
-          />
-        ))}
+        {messages.map((message, idx) =>
+          message.role === 'user' ? (
+            <div key={message.id} style={{ textAlign: 'right' }}>
+              <p
+                style={{
+                  display: 'inline-block',
+                  maxWidth: '85%',
+                  margin: 0,
+                  padding: '8px 12px',
+                  borderRadius: '12px 12px 2px 12px',
+                  border: '1px solid var(--teal-soft)',
+                  backgroundColor: 'var(--teal-wash)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.875rem',
+                  color: 'var(--base-ink)',
+                  textAlign: 'left',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {message.content}
+              </p>
+            </div>
+          ) : (
+            <div key={message.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div
+                style={{
+                  borderLeft: '2.5px solid var(--teal-main)',
+                  borderRadius: '0 6px 6px 0',
+                  padding: '10px 14px',
+                  backgroundColor: '#fff',
+                }}
+              >
+                <AssistantAnswer text={message.content} sources={message.cited_chunks} />
+              </div>
+              <button
+                onClick={() => {
+                  const previous = messages[idx - 1]
+                  const question = previous?.role === 'user' ? previous.content : message.content
+                  void saveDoubt(question, message.content)
+                }}
+                style={{
+                  alignSelf: 'flex-start',
+                  border: 'none',
+                  background: 'none',
+                  padding: 0,
+                  color: 'var(--teal-strong)',
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Salvar como dúvida
+              </button>
+            </div>
+          )
+        )}
 
         {streaming && streamingContent && (
-          <TutorBlock text={streamingContent} sources={streamingSources} subjectId={subjectId} />
+          <div
+            style={{
+              borderLeft: '2.5px solid var(--teal-main)',
+              borderRadius: '0 6px 6px 0',
+              padding: '10px 14px',
+              backgroundColor: '#fff',
+            }}
+          >
+            <AssistantAnswer text={streamingContent} sources={streamingSources} />
+          </div>
         )}
 
         {errorMessage && (
@@ -131,7 +221,7 @@ export function ChatPanel({
             style={{
               fontFamily: 'var(--font-ui)',
               fontSize: '0.8125rem',
-              color: 'var(--base-whisper)',
+              color: 'var(--terracotta-strong)',
               margin: 0,
             }}
           >
@@ -187,7 +277,7 @@ export function ChatPanel({
             ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            disabled={streaming}
+            disabled={streaming || !conversationId}
             placeholder="Pergunte sobre os materiais..."
             rows={2}
             style={{
@@ -227,175 +317,6 @@ export function ChatPanel({
           </button>
         </div>
       </form>
-    </div>
-  )
-}
-
-function MessageBubble({
-  message,
-  previousMessage,
-  subjectId,
-  onSaveDoubt,
-}: {
-  message: ChatMessage
-  previousMessage?: ChatMessage
-  subjectId: string
-  onSaveDoubt: () => void
-}) {
-  if (message.role === 'user') {
-    return (
-      <div style={{ textAlign: 'right' }}>
-        <p
-          style={{
-            display: 'inline-block',
-            maxWidth: '85%',
-            margin: 0,
-            padding: '8px 12px',
-            borderRadius: '12px 12px 2px 12px',
-            border: '1px solid var(--base-edge)',
-            backgroundColor: 'var(--base-canvas)',
-            fontFamily: 'var(--font-ui)',
-            fontSize: '0.875rem',
-            color: 'var(--base-ink)',
-            textAlign: 'left',
-          }}
-        >
-          {message.content}
-        </p>
-      </div>
-    )
-  }
-
-  if (message.role === 'system') {
-    return (
-      <div style={{ textAlign: 'center' }}>
-        <p
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-ui)',
-            fontSize: '0.6875rem',
-            color: 'var(--base-whisper)',
-          }}
-        >
-          conversa anterior resumida
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {previousMessage?.role === 'user' && previousMessage.content.startsWith('"') && (
-        <blockquote
-          style={{
-            margin: 0,
-            padding: '8px 10px',
-            backgroundColor: 'var(--teal-wash)',
-            borderLeft: '2px solid var(--teal-main)',
-            fontFamily: 'var(--font-body)',
-            fontSize: '0.8125rem',
-            fontStyle: 'italic',
-            color: 'var(--base-ink-soft)',
-            whiteSpace: 'pre-wrap',
-          }}
-        >
-          {previousMessage.content}
-        </blockquote>
-      )}
-      <TutorBlock text={message.content} sources={message.cited_chunks} subjectId={subjectId} />
-      <div>
-        <button
-          onClick={onSaveDoubt}
-          style={{
-            border: 'none',
-            background: 'none',
-            padding: 0,
-            color: 'var(--teal-strong)',
-            fontFamily: 'var(--font-ui)',
-            fontSize: '0.75rem',
-            cursor: 'pointer',
-          }}
-        >
-          Salvar como dúvida
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function TutorBlock({
-  text,
-  sources,
-  subjectId,
-}: {
-  text: string
-  sources: CitedChunk[]
-  subjectId: string
-}) {
-  return (
-    <div
-      style={{
-        borderLeft: '2.5px solid var(--teal-main)',
-        borderRadius: '0 6px 6px 0',
-        padding: '10px 14px',
-        backgroundColor: '#fff',
-      }}
-    >
-      <p
-        style={{
-          margin: '0 0 6px',
-          fontFamily: 'var(--font-ui)',
-          fontSize: '0.6875rem',
-          color: 'var(--base-whisper)',
-        }}
-      >
-        Tutor · resposta
-      </p>
-      <p
-        style={{
-          margin: 0,
-          fontFamily: 'var(--font-body)',
-          fontSize: '0.8125rem',
-          color: 'var(--base-ink)',
-          lineHeight: 1.55,
-          whiteSpace: 'pre-wrap',
-        }}
-      >
-        {text}
-      </p>
-      {sources.length > 0 && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {sources.map((source, index) => {
-            const label = `${source.material_title}${source.page_number ? ` · p.${source.page_number}` : ''}`
-            const sourceStyle = {
-              fontFamily: 'var(--font-ui)',
-              fontSize: '0.6875rem',
-              color: 'var(--base-whisper)',
-            }
-            if (source.material_id && source.topic_id) {
-              return (
-                <span key={`${source.material_title}-${index}`} style={sourceStyle}>
-                  Fonte:{' '}
-                  <Link
-                    href={{
-                      pathname: `/subjects/${subjectId}/topics/${source.topic_id}/materials/${source.material_id}`,
-                      query: source.page_number ? { page: source.page_number } : undefined,
-                    }}
-                    style={{ color: 'var(--teal-strong)' }}
-                  >
-                    {label}
-                  </Link>
-                </span>
-              )
-            }
-            return (
-              <span key={`${source.material_title}-${index}`} style={sourceStyle}>
-                Fonte: <span style={{ color: 'var(--teal-strong)' }}>{label}</span>
-              </span>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }

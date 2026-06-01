@@ -1,23 +1,24 @@
-export interface CitedChunk {
-  chunk_id: string
-  material_title: string
-  material_id?: string | null
+import type { CitedChunk } from '@/types/chat'
+
+export interface Conversation {
+  id: string
+  title: string | null
   topic_id?: string | null
-  subject_id?: string | null
-  page_number: number | null
-  snippet: string
+  material_id?: string | null
+  created_at: string
+  updated_at: string
 }
 
-export interface ChatMessage {
+export interface AssistantMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   cited_chunks: CitedChunk[]
-  tokens_used?: number | null
   created_at: string
 }
 
-export type SSEEvent =
+export type AssistantSSEEvent =
+  | { type: 'title'; title: string }
   | { type: 'token'; content: string }
   | { type: 'source'; chunks: CitedChunk[] }
   | { type: 'done'; message_id: string }
