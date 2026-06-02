@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { LayoutDashboard, BookOpen, HelpCircle, Layers3, Repeat2, Sparkles, LogOut } from 'lucide-react'
+import { LayoutDashboard, BookOpen, HelpCircle, Layers3, Repeat2, Sparkles, GraduationCap, CalendarDays, LogOut } from 'lucide-react'
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -12,6 +12,8 @@ const navItems = [
   { href: '/duvidas', icon: HelpCircle, label: 'Duvidas' },
   { href: '/flashcards', icon: Layers3, label: 'Flashcards' },
   { href: '/review', icon: Repeat2, label: 'Revisao' },
+  { href: '/prova', icon: GraduationCap, label: 'Prova' },
+  { href: '/cronograma', icon: CalendarDays, label: 'Cronograma' },
 ]
 
 export function NavSidebar() {
