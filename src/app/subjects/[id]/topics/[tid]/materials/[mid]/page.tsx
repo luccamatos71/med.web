@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ChatPanel } from '@/components/viewer/ChatPanel'
 import { MaterialBody } from '@/components/viewer/MaterialBody'
 import { SelectionFloater } from '@/components/viewer/SelectionFloater'
+import { SummaryView } from '@/components/summary/SummaryView'
 import type { Material } from '@/types/material'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -35,6 +36,7 @@ export default function MaterialViewerPage() {
   const [readPosition, setReadPosition] = useState<{ scroll_y?: number; page?: number } | null>(null)
   const [pendingQuestion, setPendingQuestion] = useState<string | undefined>(undefined)
   const [selectionSavedFlag, setSelectionSavedFlag] = useState<string | null>(null)
+  const [tab, setTab] = useState<'material' | 'resumo'>('material')
 
   const bodyPanelRef = useRef<HTMLDivElement>(null)
   const accessToken = (session?.accessToken as string) ?? ''
@@ -194,17 +196,44 @@ export default function MaterialViewerPage() {
           </div>
         ) : (
           <>
-            <MaterialBody
-              material={material}
-              accessToken={accessToken}
-              initialPosition={initialPosition}
-              panelRef={bodyPanelRef}
-            />
-            <SelectionFloater
-              containerRef={bodyPanelRef}
-              onAskAbout={(text) => setPendingQuestion(text)}
-              onSaveDoubt={(text) => void saveSelectionAsDoubt(text)}
-            />
+            <div style={{ display: 'flex', gap: 4, marginBottom: 20, backgroundColor: 'var(--base-surface)', border: '1px solid var(--base-edge)', borderRadius: 'var(--radius-round)', padding: 3, width: 'fit-content' }}>
+              {(['material', 'resumo'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    padding: '6px 16px',
+                    borderRadius: 'var(--radius-round)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: '0.8125rem',
+                    backgroundColor: tab === t ? 'var(--teal-strong)' : 'transparent',
+                    color: tab === t ? '#fff' : 'var(--base-ink-soft)',
+                  }}
+                >
+                  {t === 'material' ? 'Material' : 'Resumo'}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'resumo' ? (
+              <SummaryView materialId={materialId} materialTitle={material.title} accessToken={accessToken} />
+            ) : (
+              <MaterialBody
+                material={material}
+                accessToken={accessToken}
+                initialPosition={initialPosition}
+                panelRef={bodyPanelRef}
+              />
+            )}
+            {tab === 'material' && (
+              <SelectionFloater
+                containerRef={bodyPanelRef}
+                onAskAbout={(text) => setPendingQuestion(text)}
+                onSaveDoubt={(text) => void saveSelectionAsDoubt(text)}
+              />
+            )}
             {selectionSavedFlag && (
               <p
                 style={{
