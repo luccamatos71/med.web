@@ -218,7 +218,7 @@ export default function MaterialViewerPage() {
             </div>
 
             {tab === 'resumo' ? (
-              <SummaryView materialId={materialId} materialTitle={material.title} accessToken={accessToken} />
+              <SummaryView materialId={materialId} title={material.title} accessToken={accessToken} />
             ) : (
               <MaterialBody
                 material={material}
