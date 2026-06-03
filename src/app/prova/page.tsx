@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { GraduationCap, Layers3, Check, X, Clock, ArrowLeft, ArrowRight } from 'lucide-react'
+import { GraduationCap, Layers3, Check, X, Clock, ArrowLeft, ArrowRight, Zap } from 'lucide-react'
 
-import type { ExamResult, ExamSessionPublic } from '@/types/exam'
+import type { ExamHistory, ExamResult, ExamSessionPublic } from '@/types/exam'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -31,6 +31,7 @@ export default function ProvaPage() {
   const [current, setCurrent] = useState(0)
   const [result, setResult] = useState<ExamResult | null>(null)
   const [seconds, setSeconds] = useState(0)
+  const [history, setHistory] = useState<ExamHistory | null>(null)
 
   // drill
   const [cards, setCards] = useState<Flashcard[]>([])
@@ -46,6 +47,17 @@ export default function ProvaPage() {
         setSubjects(list)
         if (list[0]) setSubjectId(list[0].id)
       })
+      .catch(() => {})
+    fetch(`${API}/api/v1/exams`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((h) => setHistory(h))
+      .catch(() => {})
+  }, [accessToken])
+
+  const reloadHistory = useCallback(() => {
+    fetch(`${API}/api/v1/exams`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((h) => setHistory(h))
       .catch(() => {})
   }, [accessToken])
 
@@ -109,11 +121,11 @@ export default function ProvaPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ answers: Object.fromEntries(Object.entries(answers).map(([k, v]) => [k, v])), duration_seconds: seconds }),
       })
-      if (res.ok) { setResult(await res.json()); setPhase('result') }
+      if (res.ok) { setResult(await res.json()); setPhase('result'); reloadHistory() }
     } finally {
       setBusy(false)
     }
-  }, [accessToken, exam, answers, seconds])
+  }, [accessToken, exam, answers, seconds, reloadHistory])
 
   const mmss = useMemo(() => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`, [seconds])
 
@@ -125,7 +137,7 @@ export default function ProvaPage() {
         {phase === 'config' && (
           <ConfigScreen
             mode={mode} setMode={setMode} subjects={subjects} subjectId={subjectId} setSubjectId={setSubjectId}
-            numQuestions={numQuestions} setNumQuestions={setNumQuestions} busy={busy} error={error}
+            numQuestions={numQuestions} setNumQuestions={setNumQuestions} busy={busy} error={error} history={history}
             onStart={() => (mode === 'simulado' ? startSimulado() : startDrill())}
           />
         )}
@@ -138,7 +150,7 @@ export default function ProvaPage() {
         )}
 
         {phase === 'result' && result && (
-          <ResultScreen result={result} onRestart={() => { setPhase('config'); setResult(null) }} />
+          <ResultScreen result={result} accessToken={accessToken} onRestart={() => { setPhase('config'); setResult(null) }} />
         )}
 
         {phase === 'drill' && (
@@ -153,10 +165,29 @@ export default function ProvaPage() {
   )
 }
 
-function ConfigScreen({ mode, setMode, subjects, subjectId, setSubjectId, numQuestions, setNumQuestions, busy, error, onStart }: any) {
+function ConfigScreen({ mode, setMode, subjects, subjectId, setSubjectId, numQuestions, setNumQuestions, busy, error, history, onStart }: any) {
+  const finished = (history?.items || []).filter((e: any) => e.status === 'finished')
   return (
     <div style={{ marginTop: 12 }}>
       <p style={subtle}>Teste seu conhecimento com um simulado gerado por IA ou treine seus flashcards.</p>
+
+      {history && finished.length > 0 && (
+        <div style={{ ...card, marginTop: 16, background: 'var(--teal-wash)', border: '1px solid #A8DCD8' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div>
+              <p style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: 300, color: 'var(--teal-strong)', margin: 0 }}>{history.average_score ?? '—'}%</p>
+              <p style={{ ...kicker, margin: 0 }}>Média ({finished.length} prova{finished.length > 1 ? 's' : ''})</p>
+            </div>
+            <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {finished.slice(0, 8).map((e: any) => {
+                const s = Math.round(e.score ?? 0)
+                const c = s >= 70 ? 'var(--teal-strong)' : s >= 50 ? 'var(--amber-main)' : 'var(--terracotta-strong)'
+                return <span key={e.id} title={e.scope_name || ''} style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: '#fff', background: c, borderRadius: 'var(--radius-round)', padding: '3px 9px' }}>{s}%</span>
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 12, margin: '20px 0' }}>
         <ModeCard active={mode === 'simulado'} onClick={() => setMode('simulado')} icon={<GraduationCap size={22} strokeWidth={1.5} />} title="Simulado" desc="Questões de múltipla escolha com nota e gabarito comentado." />
         <ModeCard active={mode === 'treino'} onClick={() => setMode('treino')} icon={<Layers3 size={22} strokeWidth={1.5} />} title="Treino de flashcards" desc="Revise os flashcards sem afetar o agendamento (FSRS)." />
@@ -230,16 +261,39 @@ function ExamScreen({ exam, current, setCurrent, answers, setAnswers, mmss, busy
   )
 }
 
-function ResultScreen({ result, onRestart }: { result: ExamResult; onRestart: () => void }) {
+function ResultScreen({ result, accessToken, onRestart }: { result: ExamResult; accessToken: string; onRestart: () => void }) {
   const pct = Math.round(result.score)
   const color = pct >= 70 ? 'var(--teal-strong)' : pct >= 50 ? 'var(--amber-main)' : 'var(--terracotta-strong)'
+  const wrong = result.questions.filter((q) => !q.is_correct).length
+  const [flashState, setFlashState] = useState<'idle' | 'busy' | 'done'>('idle')
+
+  const createFlashcards = async () => {
+    setFlashState('busy')
+    try {
+      const res = await fetch(`${API}/api/v1/exams/${result.id}/wrong-to-flashcards`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      setFlashState(res.ok ? 'done' : 'idle')
+    } catch {
+      setFlashState('idle')
+    }
+  }
+
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ ...card, textAlign: 'center', padding: '28px' }}>
         <p style={kicker}>Resultado</p>
         <p style={{ fontFamily: 'var(--font-display)', fontSize: '3rem', fontWeight: 300, color, margin: '4px 0' }}>{pct}%</p>
         <p style={subtle}>{result.correct} de {result.total} corretas{result.duration_seconds ? ` · ${Math.floor(result.duration_seconds / 60)}min` : ''}</p>
-        <button onClick={onRestart} style={{ ...primary, marginTop: 16 }}>Nova prova</button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+          <button onClick={onRestart} style={primary}>Nova prova</button>
+          {wrong > 0 && (
+            <button onClick={createFlashcards} disabled={flashState !== 'idle'} style={{ ...ghost, opacity: flashState === 'busy' ? 0.6 : 1 }}>
+              <Zap size={15} strokeWidth={1.5} />
+              {flashState === 'done' ? 'Flashcards criados ✓' : flashState === 'busy' ? 'Criando…' : `Criar flashcards das ${wrong} que errei`}
+            </button>
+          )}
+        </div>
       </div>
 
       <h2 style={{ ...h2, marginTop: 28 }}>Gabarito comentado</h2>

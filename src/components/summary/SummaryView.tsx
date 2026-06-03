@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, RefreshCw, Download, Network, FileText, Lightbulb, BookText,
-  Activity, Brain, Pill, Stethoscope, HeartPulse, FlaskConical, ListChecks,
+  Activity, Brain, Pill, Stethoscope, HeartPulse, FlaskConical, ListChecks, EyeOff,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -59,6 +59,7 @@ export function SummaryView({
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<View>('resumo')
+  const [studyMode, setStudyMode] = useState(false)
   const exportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -138,17 +139,25 @@ export function SummaryView({
           <ToggleBtn active={view === 'mapa'} onClick={() => setView('mapa')} icon={<Network size={14} strokeWidth={1.5} />} label="Mapa mental" />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {view === 'resumo' && (
+            <button onClick={() => setStudyMode((v) => !v)} style={{ ...ghostBtn, ...(studyMode ? { borderColor: 'var(--teal-main)', color: 'var(--teal-strong)', backgroundColor: 'var(--teal-wash)' } : {}) }}>
+              <EyeOff size={14} strokeWidth={1.5} /> {studyMode ? 'Modo estudo ativo' : 'Modo estudo'}
+            </button>
+          )}
           <button onClick={handleExport} style={ghostBtn}><Download size={14} strokeWidth={1.5} /> Exportar</button>
           <button onClick={() => generate(true)} disabled={generating} style={ghostBtn}>
             <RefreshCw size={14} strokeWidth={1.5} /> {generating ? 'Gerando…' : 'Regenerar'}
           </button>
         </div>
       </div>
+      {studyMode && view === 'resumo' && (
+        <p style={{ ...muted, margin: '0 0 12px', textAlign: 'center' }}>👆 Tente lembrar antes de tocar para revelar cada resposta.</p>
+      )}
 
       {error && <p style={{ ...muted, color: 'var(--terracotta-strong)', marginBottom: 12 }}>{error}</p>}
 
       <div ref={exportRef} style={{ backgroundColor: 'var(--base-canvas)', padding: 20, borderRadius: 'var(--radius-l)' }}>
-        {view === 'resumo' ? <ResumoBody summary={summary} /> : (
+        {view === 'resumo' ? <ResumoBody summary={summary} studyMode={studyMode} /> : (
           <div style={{ backgroundColor: 'var(--base-surface)', border: '1px solid var(--base-edge)', borderRadius: 'var(--radius-l)', overflow: 'hidden' }}>
             <MindMap markdown={summary.mindmap_markdown} />
           </div>
@@ -162,7 +171,21 @@ export function SummaryView({
   )
 }
 
-function ResumoBody({ summary }: { summary: SummaryContent }) {
+function Reveal({ active, children }: { active: boolean; children: React.ReactNode }) {
+  const [shown, setShown] = useState(false)
+  if (!active || shown) return <>{children}</>
+  return (
+    <span
+      onClick={() => setShown(true)}
+      style={{ filter: 'blur(5px)', cursor: 'pointer', userSelect: 'none', transition: 'filter .2s' }}
+      title="Tocar para revelar"
+    >
+      {children}
+    </span>
+  )
+}
+
+function ResumoBody({ summary, studyMode }: { summary: SummaryContent; studyMode: boolean }) {
   return (
     <article style={{ maxWidth: 720, margin: '0 auto' }}>
       {/* Title */}
@@ -221,7 +244,7 @@ function ResumoBody({ summary }: { summary: SummaryContent }) {
                     <span style={{ marginTop: 8, width: 6, height: 6, borderRadius: '50%', backgroundColor: theme.accent, flexShrink: 0 }} />
                     <span style={{ ...bodyText, margin: 0 }}>
                       {term && <strong style={{ color: theme.accent, fontWeight: 600 }}>{term}: </strong>}
-                      {rest}
+                      <Reveal active={studyMode}>{rest}</Reveal>
                     </span>
                   </li>
                 )
@@ -259,7 +282,7 @@ function ResumoBody({ summary }: { summary: SummaryContent }) {
             {summary.glossary.map((g, i) => (
               <div key={i} style={{ backgroundColor: 'var(--base-surface)', border: '1px solid var(--base-edge)', borderLeft: '3px solid var(--teal-main)', borderRadius: 'var(--radius-m)', padding: '10px 12px' }}>
                 <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--teal-strong)', margin: '0 0 2px' }}>{g.term}</p>
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8125rem', color: 'var(--base-ink-soft)', margin: 0, lineHeight: 1.5 }}>{g.definition}</p>
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8125rem', color: 'var(--base-ink-soft)', margin: 0, lineHeight: 1.5 }}><Reveal active={studyMode}>{g.definition}</Reveal></p>
               </div>
             ))}
           </div>
