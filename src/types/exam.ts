@@ -35,3 +35,21 @@ export interface ExamResult {
   duration_seconds: number | null
   questions: ExamQuestionResult[]
 }
+
+export interface ExamHistoryItem {
+  id: string
+  scope_type: string
+  scope_id: string
+  scope_name: string | null
+  num_questions: number
+  status: string
+  score: number | null
+  created_at: string
+  finished_at: string | null
+}
+
+export interface ExamHistory {
+  average_score: number | null
+  total_exams: number
+  items: ExamHistoryItem[]
+}
