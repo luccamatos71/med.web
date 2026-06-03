@@ -47,13 +47,16 @@ function splitTerm(text: string): [string | null, string] {
 
 export function SummaryView({
   materialId,
-  materialTitle,
+  topicId,
+  title,
   accessToken,
 }: {
-  materialId: string
-  materialTitle: string
+  materialId?: string
+  topicId?: string
+  title: string
   accessToken: string
 }) {
+  const base = topicId ? `topics/${topicId}` : `materials/${materialId}`
   const [summary, setSummary] = useState<SummaryContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -66,7 +69,7 @@ export function SummaryView({
     if (!accessToken) return
     let cancelled = false
     setLoading(true)
-    fetch(`${API}/api/v1/materials/${materialId}/summary`, {
+    fetch(`${API}/api/v1/${base}/summary`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: 'no-store',
     })
@@ -79,7 +82,7 @@ export function SummaryView({
     return () => {
       cancelled = true
     }
-  }, [materialId, accessToken])
+  }, [base, accessToken])
 
   const generate = useCallback(
     async (regenerate = false) => {
@@ -87,7 +90,7 @@ export function SummaryView({
       setError(null)
       try {
         const res = await fetch(
-          `${API}/api/v1/materials/${materialId}/summary${regenerate ? '?regenerate=true' : ''}`,
+          `${API}/api/v1/${base}/summary${regenerate ? '?regenerate=true' : ''}`,
           { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } }
         )
         if (!res.ok) {
@@ -102,14 +105,14 @@ export function SummaryView({
         setGenerating(false)
       }
     },
-    [materialId, accessToken]
+    [base, accessToken]
   )
 
   const handleExport = useCallback(async () => {
     if (!exportRef.current) return
-    const safe = materialTitle.replace(/[^\w\-]+/g, '_').slice(0, 40)
+    const safe = title.replace(/[^\w\-]+/g, '_').slice(0, 40)
     await exportNodeAsPng(exportRef.current, `resumo_${safe}`)
-  }, [materialTitle])
+  }, [title])
 
   if (loading) return <p style={muted}>Carregando resumo…</p>
 

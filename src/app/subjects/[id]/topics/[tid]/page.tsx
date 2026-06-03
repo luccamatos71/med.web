@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { UploadModal } from '@/components/material/UploadModal'
 import { NoteModal } from '@/components/material/NoteModal'
 import { MaterialCard } from '@/components/material/MaterialCard'
+import { SummaryView } from '@/components/summary/SummaryView'
 import { useUpload } from '@/hooks/useUpload'
 import type { Material } from '@/types/material'
 import type { Doubt } from '@/types/doubt'
@@ -87,6 +88,7 @@ export default function TopicDetailPage() {
   const [flashcardMessage, setFlashcardMessage] = useState('')
   const [doubtMessage, setDoubtMessage] = useState('')
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false)
+  const [view, setView] = useState<'content' | 'summary'>('content')
 
   const accessToken = (session?.accessToken as string) ?? ''
 
@@ -300,6 +302,27 @@ export default function TopicDetailPage() {
         {topic.name}
       </h1>
 
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, backgroundColor: 'var(--base-surface)', border: '1px solid var(--base-edge)', borderRadius: 'var(--radius-round)', padding: 3, width: 'fit-content' }}>
+        {(['content', 'summary'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setView(t)}
+            style={{
+              padding: '6px 16px', borderRadius: 'var(--radius-round)', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-ui)', fontSize: '0.8125rem',
+              backgroundColor: view === t ? 'var(--teal-strong)' : 'transparent',
+              color: view === t ? '#fff' : 'var(--base-ink-soft)',
+            }}
+          >
+            {t === 'content' ? 'Conteúdo' : 'Resumo do tópico'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'summary' ? (
+        <SummaryView topicId={topicId} title={topic.name} accessToken={accessToken} />
+      ) : (
+      <>
       {topic.subtopics.length > 0 && (
         <div style={{ marginBottom: '32px' }}>
           <h2
@@ -594,6 +617,8 @@ export default function TopicDetailPage() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {showUploadModal && (
         <UploadModal
