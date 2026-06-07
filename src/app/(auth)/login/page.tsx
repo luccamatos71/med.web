@@ -67,7 +67,7 @@ function LoginForm() {
             margin: '0 0 8px 0',
           }}
         >
-          .med
+          Ana Space
         </h1>
         <p
           style={{

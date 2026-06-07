@@ -39,12 +39,12 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: ".med",
+  title: "Ana Space",
   description: "Plataforma de estudos em medicina",
-  applicationName: '.med',
+  applicationName: 'Ana Space',
   appleWebApp: {
     capable: true,
-    title: '.med',
+    title: 'Ana Space',
     statusBarStyle: 'default',
   },
 }

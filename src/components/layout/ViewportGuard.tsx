@@ -52,7 +52,7 @@ export function ViewportGuard({ children }: { children: React.ReactNode }) {
               color: 'var(--base-ink)',
             }}
           >
-            .med
+            Ana Space
           </h1>
           <p
             style={{

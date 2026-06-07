@@ -18,14 +18,14 @@ export default function Icon() {
           alignItems: 'center',
           justifyContent: 'center',
           background: '#0B4F4B',
-          color: '#F9F5F0',
-          fontSize: 212,
+          color: '#FFFFFF',
+          fontSize: 200,
           fontFamily: 'serif',
           fontWeight: 500,
-          letterSpacing: 0,
+          letterSpacing: 4,
         }}
       >
-        .m
+        AF
       </div>
     ),
     size

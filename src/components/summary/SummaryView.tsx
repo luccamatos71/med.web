@@ -15,7 +15,7 @@ const API = process.env.NEXT_PUBLIC_API_URL
 
 type View = 'resumo' | 'mapa'
 
-// Soft pastel themes (harmonised with .med), rotated across sections.
+// Soft pastel themes (harmonised with Ana Space), rotated across sections.
 interface Theme { bg: string; border: string; accent: string; icon: LucideIcon }
 const THEMES: Theme[] = [
   { bg: '#E6F4F2', border: '#A8DCD8', accent: '#0B6E6A', icon: Activity },     // teal
@@ -167,7 +167,7 @@ export function SummaryView({
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, margin: '16px 4px 0', opacity: 0.7 }}>
           <Sparkles size={12} strokeWidth={1.5} style={{ color: 'var(--teal-strong)' }} />
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', color: 'var(--teal-strong)' }}>.med</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', color: 'var(--teal-strong)' }}>Ana Space</span>
         </div>
       </div>
     </div>

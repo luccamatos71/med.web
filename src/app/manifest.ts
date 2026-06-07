@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '.med',
-    short_name: '.med',
+    name: 'Ana Space',
+    short_name: 'Ana Space',
     description: 'Plataforma de estudos em medicina',
     start_url: '/subjects',
     display: 'standalone',
