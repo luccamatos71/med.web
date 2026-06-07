@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Sparkles, RefreshCw, Download, Network, FileText, Lightbulb, BookText,
+  Sparkles, RefreshCw, Download, Network, FileText, Lightbulb, BookText, Pencil,
   Activity, Brain, Pill, Stethoscope, HeartPulse, FlaskConical, ListChecks, EyeOff,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import type { SummaryContent, SummaryResponse } from '@/types/summary'
 import { exportNodeAsPng } from '@/lib/exportImage'
+import { AnnotationCanvas } from '@/components/annotation/AnnotationCanvas'
+import { AnnotationToolbar } from '@/components/annotation/AnnotationToolbar'
+import { useAnnotationPersistence, type AnnotationSaveStatus } from '@/hooks/useAnnotationPersistence'
+import type { AnnotationTool } from '@/lib/strokeRenderer'
 import { MindMap } from './MindMap'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -63,6 +67,7 @@ export function SummaryView({
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<View>('resumo')
   const [studyMode, setStudyMode] = useState(false)
+  const [annotationMode, setAnnotationMode] = useState(false)
   const exportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -147,6 +152,16 @@ export function SummaryView({
               <EyeOff size={14} strokeWidth={1.5} /> {studyMode ? 'Modo estudo ativo' : 'Modo estudo'}
             </button>
           )}
+          {view === 'resumo' && materialId && (
+            <button
+              type="button"
+              aria-pressed={annotationMode}
+              onClick={() => setAnnotationMode((v) => !v)}
+              style={{ ...ghostBtn, ...(annotationMode ? { borderColor: 'var(--teal-main)', color: 'var(--teal-strong)', backgroundColor: 'var(--teal-wash)' } : {}) }}
+            >
+              <Pencil size={14} strokeWidth={1.5} /> {annotationMode ? 'Anotando' : 'Anotar'}
+            </button>
+          )}
           <button onClick={handleExport} style={ghostBtn}><Download size={14} strokeWidth={1.5} /> Exportar</button>
           <button onClick={() => generate(true)} disabled={generating} style={ghostBtn}>
             <RefreshCw size={14} strokeWidth={1.5} /> {generating ? 'Gerando…' : 'Regenerar'}
@@ -160,7 +175,15 @@ export function SummaryView({
       {error && <p style={{ ...muted, color: 'var(--terracotta-strong)', marginBottom: 12 }}>{error}</p>}
 
       <div ref={exportRef} style={{ backgroundColor: 'var(--base-canvas)', padding: 20, borderRadius: 'var(--radius-l)' }}>
-        {view === 'resumo' ? <ResumoBody summary={summary} studyMode={studyMode} /> : (
+        {view === 'resumo' ? (
+          <ResumoBody
+            summary={summary}
+            studyMode={studyMode}
+            annotationMode={annotationMode}
+            materialId={materialId}
+            accessToken={accessToken}
+          />
+        ) : (
           <div style={{ backgroundColor: 'var(--base-surface)', border: '1px solid var(--base-edge)', borderRadius: 'var(--radius-l)', overflow: 'hidden' }}>
             <MindMap markdown={summary.mindmap_markdown} />
           </div>
@@ -188,7 +211,19 @@ function Reveal({ active, children }: { active: boolean; children: React.ReactNo
   )
 }
 
-function ResumoBody({ summary, studyMode }: { summary: SummaryContent; studyMode: boolean }) {
+function ResumoBody({
+  summary,
+  studyMode,
+  annotationMode,
+  materialId,
+  accessToken,
+}: {
+  summary: SummaryContent
+  studyMode: boolean
+  annotationMode: boolean
+  materialId?: string
+  accessToken: string
+}) {
   return (
     <article style={{ maxWidth: 720, margin: '0 auto' }}>
       {/* Title */}
@@ -253,6 +288,9 @@ function ResumoBody({ summary, studyMode }: { summary: SummaryContent; studyMode
                 )
               })}
             </ul>
+            {annotationMode && materialId && (
+              <SectionAnnotationArea materialId={materialId} accessToken={accessToken} index={i} />
+            )}
           </div>
         )
       })}
@@ -314,6 +352,74 @@ function ToggleBtn({ active, onClick, icon, label }: { active: boolean; onClick:
     }}>
       {icon} {label}
     </button>
+  )
+}
+
+function SectionAnnotationArea({ materialId, accessToken, index }: { materialId: string; accessToken: string; index: number }) {
+  const [tool, setTool] = useState<AnnotationTool>('pen')
+  const [color, setColor] = useState('var(--base-ink)')
+  const [width, setWidth] = useState(4)
+  const areaRef = useRef<HTMLDivElement | null>(null)
+
+  const annotation = useAnnotationPersistence({
+    materialId,
+    surface: 'summary',
+    anchor: `section-${index}`,
+    accessToken,
+    enabled: true,
+  })
+
+  function handleUndo() {
+    annotation.onChange(annotation.strokes.slice(0, -1))
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+        <AnnotationToolbar
+          tool={tool}
+          onToolChange={setTool}
+          color={color}
+          onColorChange={setColor}
+          width={width}
+          onWidthChange={setWidth}
+          onUndo={handleUndo}
+          canUndo={annotation.strokes.length > 0}
+        />
+        <SaveStatusLabel status={annotation.status} />
+      </div>
+      <div
+        ref={areaRef}
+        style={{
+          position: 'relative',
+          height: 220,
+          backgroundColor: '#fff',
+          border: '1px dashed var(--base-edge)',
+          borderRadius: 'var(--radius-m)',
+          overflow: 'hidden',
+        }}
+      >
+        {!annotation.loading && (
+          <AnnotationCanvas
+            value={annotation.strokes}
+            onChange={annotation.onChange}
+            tool={tool}
+            color={color}
+            width={width}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SaveStatusLabel({ status }: { status: AnnotationSaveStatus }) {
+  if (status === 'idle') return null
+  const text = status === 'saving' ? 'Salvando…' : status === 'saved' ? 'Anotações salvas' : 'Não foi possível salvar as anotações'
+  return (
+    <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: status === 'error' ? 'var(--terracotta-strong)' : 'var(--base-whisper)' }}>
+      {text}
+    </span>
   )
 }
 

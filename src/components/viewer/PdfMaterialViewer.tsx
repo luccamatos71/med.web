@@ -1,10 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Pencil, Search, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AnnotationCanvas } from '@/components/annotation/AnnotationCanvas'
+import { AnnotationToolbar } from '@/components/annotation/AnnotationToolbar'
+import { useAnnotationPersistence, type AnnotationSaveStatus } from '@/hooks/useAnnotationPersistence'
+import { exportNodeAsPng } from '@/lib/exportImage'
+import type { AnnotationTool } from '@/lib/strokeRenderer'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -56,6 +61,21 @@ export function PdfMaterialViewer({
   const [pageTexts, setPageTexts] = useState<Record<number, string>>({})
   const [pdfError, setPdfError] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pageWrapperRef = useRef<HTMLDivElement | null>(null)
+
+  const [annotationMode, setAnnotationMode] = useState(false)
+  const [annotationTool, setAnnotationTool] = useState<AnnotationTool>('pen')
+  const [annotationColor, setAnnotationColor] = useState('var(--base-ink)')
+  const [annotationWidth, setAnnotationWidth] = useState(4)
+
+  // Lazy-loaded by anchor (AC6): only the page currently on screen fetches/saves strokes.
+  const annotation = useAnnotationPersistence({
+    materialId,
+    surface: 'pdf_page',
+    anchor: String(pageNumber),
+    accessToken,
+    enabled: Boolean(numPages),
+  })
 
   const matchedPages = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -121,6 +141,16 @@ export function PdfMaterialViewer({
   }
 
   const searchPattern = query.trim() ? new RegExp(`(${escapeRegExp(query.trim())})`, 'gi') : null
+
+  function handleUndoAnnotation() {
+    annotation.onChange(annotation.strokes.slice(0, -1))
+  }
+
+  async function handleExportPage() {
+    if (!pageWrapperRef.current) return
+    const safe = title.replace(/[^\w\-]+/g, '_').slice(0, 40)
+    await exportNodeAsPng(pageWrapperRef.current, `${safe}_pagina_${pageNumber}`)
+  }
 
   return (
     <div>
@@ -189,7 +219,43 @@ export function PdfMaterialViewer({
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: 'var(--base-whisper)', minWidth: 76 }}>
           {query.trim() ? `${matchedPages.length} páginas` : ''}
         </span>
+
+        <button
+          type="button"
+          aria-label={annotationMode ? 'Desativar modo de anotação' : 'Ativar modo de anotação'}
+          aria-pressed={annotationMode}
+          title="Modo de anotação"
+          onClick={() => setAnnotationMode((value) => !value)}
+          style={annotationToggleStyle(annotationMode)}
+        >
+          <Pencil size={16} strokeWidth={1.5} />
+        </button>
+        <button
+          type="button"
+          aria-label="Exportar página anotada como imagem"
+          title="Exportar página"
+          onClick={handleExportPage}
+          style={iconButtonStyle(true)}
+        >
+          <Download size={16} strokeWidth={1.5} />
+        </button>
       </div>
+
+      {annotationMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+          <AnnotationToolbar
+            tool={annotationTool}
+            onToolChange={setAnnotationTool}
+            color={annotationColor}
+            onColorChange={setAnnotationColor}
+            width={annotationWidth}
+            onWidthChange={setAnnotationWidth}
+            onUndo={handleUndoAnnotation}
+            canUndo={annotation.strokes.length > 0}
+          />
+          <SaveStatusLabel status={annotation.status} />
+        </div>
+      )}
 
       {pdfError ? (
         <p style={{ color: 'var(--terracotta-strong)', fontFamily: 'var(--font-ui)', fontSize: '0.9375rem' }}>
@@ -209,18 +275,33 @@ export function PdfMaterialViewer({
             onLoadSuccess={handleDocumentLoadSuccess}
             onLoadError={() => setPdfError('Não foi possível carregar o PDF.')}
           >
-            <Page
-              pageNumber={pageNumber}
-              scale={scale}
-              renderTextLayer
-              renderAnnotationLayer
-              loading={<Skeleton style={{ height: '70vh', width: 640 }} />}
-              customTextRenderer={({ str }) => {
-                const escaped = escapeHtml(str)
-                if (!searchPattern) return escaped
-                return escaped.replace(searchPattern, '<mark style="background:#FDE68A;color:#1C1917">$1</mark>')
-              }}
-            />
+            {/* `lineHeight: 0` + `inline-block` makes this wrapper hug the rendered page exactly,
+                so the absolutely-positioned annotation overlay never drifts at any zoom level (AC1). */}
+            <div ref={pageWrapperRef} style={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}>
+              <Page
+                pageNumber={pageNumber}
+                scale={scale}
+                renderTextLayer
+                renderAnnotationLayer
+                loading={<Skeleton style={{ height: '70vh', width: 640 }} />}
+                customTextRenderer={({ str }) => {
+                  const escaped = escapeHtml(str)
+                  if (!searchPattern) return escaped
+                  return escaped.replace(searchPattern, '<mark style="background:#FDE68A;color:#1C1917">$1</mark>')
+                }}
+              />
+              {annotationMode && !annotation.loading && (
+                <div style={{ position: 'absolute', inset: 0 }}>
+                  <AnnotationCanvas
+                    value={annotation.strokes}
+                    onChange={annotation.onChange}
+                    tool={annotationTool}
+                    color={annotationColor}
+                    width={annotationWidth}
+                  />
+                </div>
+              )}
+            </div>
           </Document>
         </div>
       )}
@@ -277,4 +358,30 @@ function iconButtonStyle(enabled: boolean): React.CSSProperties {
     color: enabled ? 'var(--base-ink)' : 'var(--base-mute)',
     cursor: enabled ? 'pointer' : 'not-allowed',
   }
+}
+
+function annotationToggleStyle(active: boolean): React.CSSProperties {
+  return {
+    width: 32,
+    height: 32,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid',
+    borderColor: active ? 'var(--teal-main)' : 'var(--base-edge)',
+    borderRadius: 'var(--radius-m)',
+    backgroundColor: active ? 'var(--teal-wash)' : 'var(--base-surface)',
+    color: active ? 'var(--teal-strong)' : 'var(--base-ink)',
+    cursor: 'pointer',
+  }
+}
+
+function SaveStatusLabel({ status }: { status: AnnotationSaveStatus }) {
+  if (status === 'idle') return null
+  const text = status === 'saving' ? 'Salvando…' : status === 'saved' ? 'Anotações salvas' : 'Não foi possível salvar as anotações'
+  return (
+    <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: status === 'error' ? 'var(--terracotta-strong)' : 'var(--base-whisper)' }}>
+      {text}
+    </span>
+  )
 }
