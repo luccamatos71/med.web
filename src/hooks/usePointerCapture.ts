@@ -53,14 +53,22 @@ export function reducePointerCapture(state: PointerCaptureState, event: PointerC
       return { state, accept: true }
     }
 
-    if (activePointerType === 'pen') {
-      // Palm rejection: a second pointer (touch/mouse/another pen) never
-      // interrupts an in-progress pen stroke.
-      return { state, accept: false }
+    if (event.pointerType === 'pen' && event.phase === 'down') {
+      // Pen always wins immediately — even over another pointer this state
+      // machine still considers "active". On iOS Safari a pen's `pointerup`/
+      // `pointercancel` is occasionally dropped (capture lost mid-gesture),
+      // which would otherwise leave `activePointerType: 'pen'` stuck forever
+      // and silently reject every later Apple Pencil contact ("doesn't
+      // recognize the pencil anymore"). Letting a fresh pen contact take over
+      // unconditionally makes the machine self-healing without weakening palm
+      // rejection — palm contact is always reported as `touch`, never `pen`.
+      return { state: { activePointerId: event.pointerId, activePointerType: 'pen' }, accept: true }
     }
 
-    if (event.pointerType === 'pen' && event.phase === 'down') {
-      return { state: { activePointerId: event.pointerId, activePointerType: 'pen' }, accept: true }
+    if (activePointerType === 'pen') {
+      // Palm rejection: a second non-pen pointer never interrupts an
+      // in-progress pen stroke.
+      return { state, accept: false }
     }
 
     return { state, accept: false }
@@ -210,6 +218,13 @@ export function usePointerCapture({
 
       dispatch(event, 'down', container)
       if (stateRef.current.activePointerId === event.pointerId) {
+        if (event.pointerType === 'pen') {
+          // The pen just took over (possibly from a stuck/stale pointer or a
+          // mid-flight gesture) — drop any multi-touch bookkeeping so a pen
+          // stroke is never mistaken for an in-progress pinch/pan.
+          touchPointersRef.current.clear()
+          gestureActiveRef.current = false
+        }
         event.preventDefault()
         try {
           container.setPointerCapture(event.pointerId)
