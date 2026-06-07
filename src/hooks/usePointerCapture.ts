@@ -141,10 +141,40 @@ export function usePointerCapture({ containerRef, onStrokeStart, onStrokePoint, 
     const container = containerRef.current
     if (!container || disabled) return
 
-    const handleDown = (event: PointerEvent) => dispatch(event, 'down', container)
-    const handleMove = (event: PointerEvent) => dispatch(event, 'move', container)
-    const handleUp = (event: PointerEvent) => dispatch(event, 'up', container)
-    const handleCancel = (event: PointerEvent) => dispatch(event, 'cancel', container)
+    // iOS Safari hands touch/stylus sequences to its own scroll/zoom gesture
+    // recognizer unless we explicitly claim them: preventDefault stops the
+    // browser from hijacking the gesture, and setPointerCapture keeps events
+    // flowing to this container even when the pointer leaves its bounds —
+    // without both, strokes from non-Apple-Pencil styluses get cancelled
+    // mid-draw and look like "the pen isn't recognized at all".
+    const handleDown = (event: PointerEvent) => {
+      dispatch(event, 'down', container)
+      if (stateRef.current.activePointerId === event.pointerId) {
+        event.preventDefault()
+        try {
+          container.setPointerCapture(event.pointerId)
+        } catch {
+          // Capture can be rejected for some pointer types; drawing still works without it.
+        }
+      }
+    }
+    const handleMove = (event: PointerEvent) => {
+      if (container.hasPointerCapture(event.pointerId)) event.preventDefault()
+      dispatch(event, 'move', container)
+    }
+    const handleUp = (event: PointerEvent) => {
+      if (container.hasPointerCapture(event.pointerId)) {
+        event.preventDefault()
+        container.releasePointerCapture(event.pointerId)
+      }
+      dispatch(event, 'up', container)
+    }
+    const handleCancel = (event: PointerEvent) => {
+      if (container.hasPointerCapture(event.pointerId)) {
+        container.releasePointerCapture(event.pointerId)
+      }
+      dispatch(event, 'cancel', container)
+    }
 
     container.addEventListener('pointerdown', handleDown)
     container.addEventListener('pointermove', handleMove)
