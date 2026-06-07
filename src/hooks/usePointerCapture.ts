@@ -96,19 +96,53 @@ interface UsePointerCaptureOptions {
   onStrokeStart: (point: NormalizedPoint) => void
   onStrokePoint: (point: NormalizedPoint) => void
   onStrokeEnd: () => void
+  /**
+   * Fired when an in-progress draft must be discarded without committing —
+   * e.g. a second finger lands mid-stroke and the gesture must hand off to
+   * the browser's native pinch/pan recognizer (P0.1).
+   */
+  onStrokeCancel?: () => void
   /** When true, all pointer input is ignored (e.g. annotation mode is off). */
   disabled?: boolean
+  /**
+   * Lets the caller mark DOM regions (toolbars overlaid on the canvas, e.g.
+   * recolor swatches) that should never be treated as drawing input. Checked
+   * before any capture/preventDefault so taps on that UI behave like normal
+   * buttons instead of starting a stroke.
+   */
+  ignoreTarget?: (target: EventTarget | null) => boolean
 }
 
 /**
  * Captures Apple Pencil / pointer input on a container element, applies
  * "pen always wins" palm rejection, and reports normalized (0–1) coordinates
  * relative to the container so strokes stay correct across zoom levels.
+ *
+ * Also disambiguates multi-touch gestures (P0.1): a second simultaneous
+ * non-pen pointer means the user is pinching/panning, not drawing — any
+ * single-finger draft in progress is cancelled (via `onStrokeCancel`) and
+ * every pointer in that gesture is left alone (no `preventDefault`/capture)
+ * so the browser's native zoom/pan recognizer takes over, exactly like
+ * Notes lets you pinch-zoom mid-drawing without interrupting the pen.
  */
-export function usePointerCapture({ containerRef, onStrokeStart, onStrokePoint, onStrokeEnd, disabled = false }: UsePointerCaptureOptions) {
+export function usePointerCapture({
+  containerRef,
+  onStrokeStart,
+  onStrokePoint,
+  onStrokeEnd,
+  onStrokeCancel,
+  disabled = false,
+  ignoreTarget,
+}: UsePointerCaptureOptions) {
   const stateRef = useRef<PointerCaptureState>(initialPointerCaptureState)
-  const callbacksRef = useRef({ onStrokeStart, onStrokePoint, onStrokeEnd })
-  callbacksRef.current = { onStrokeStart, onStrokePoint, onStrokeEnd }
+  const callbacksRef = useRef({ onStrokeStart, onStrokePoint, onStrokeEnd, onStrokeCancel })
+  callbacksRef.current = { onStrokeStart, onStrokePoint, onStrokeEnd, onStrokeCancel }
+
+  // Multi-touch gesture tracking (P0.1) — lives entirely in refs, outside the
+  // pure `reducePointerCapture` state machine, so its 10 unit tests (which
+  // exercise only the reducer) remain untouched and unaffected.
+  const touchPointersRef = useRef<Set<number>>(new Set())
+  const gestureActiveRef = useRef(false)
 
   const dispatch = useCallback(
     (event: PointerEvent, phase: PointerPhase, container: HTMLElement) => {
@@ -148,6 +182,32 @@ export function usePointerCapture({ containerRef, onStrokeStart, onStrokePoint, 
     // without both, strokes from non-Apple-Pencil styluses get cancelled
     // mid-draw and look like "the pen isn't recognized at all".
     const handleDown = (event: PointerEvent) => {
+      if (ignoreTarget?.(event.target)) return
+
+      if (event.pointerType !== 'pen') {
+        touchPointersRef.current.add(event.pointerId)
+        if (touchPointersRef.current.size >= 2) {
+          if (!gestureActiveRef.current) {
+            gestureActiveRef.current = true
+            // Second finger landed — this is a pinch/pan, not a stroke. Hand
+            // off to the browser's native recognizer and discard any
+            // single-finger draft in flight (without committing it, P0.1).
+            const { activePointerId, activePointerType } = stateRef.current
+            if (activePointerId !== null && activePointerType !== 'pen') {
+              try {
+                container.releasePointerCapture(activePointerId)
+              } catch {
+                // Already released or never captured.
+              }
+              stateRef.current = initialPointerCaptureState
+              callbacksRef.current.onStrokeCancel?.()
+            }
+          }
+          return
+        }
+        if (gestureActiveRef.current) return
+      }
+
       dispatch(event, 'down', container)
       if (stateRef.current.activePointerId === event.pointerId) {
         event.preventDefault()
@@ -159,10 +219,18 @@ export function usePointerCapture({ containerRef, onStrokeStart, onStrokePoint, 
       }
     }
     const handleMove = (event: PointerEvent) => {
+      if (ignoreTarget?.(event.target)) return
+      if (gestureActiveRef.current && event.pointerType !== 'pen') return
       if (container.hasPointerCapture(event.pointerId)) event.preventDefault()
       dispatch(event, 'move', container)
     }
     const handleUp = (event: PointerEvent) => {
+      if (ignoreTarget?.(event.target)) return
+      if (event.pointerType !== 'pen') {
+        touchPointersRef.current.delete(event.pointerId)
+        if (touchPointersRef.current.size === 0) gestureActiveRef.current = false
+        else if (gestureActiveRef.current) return
+      }
       if (container.hasPointerCapture(event.pointerId)) {
         event.preventDefault()
         container.releasePointerCapture(event.pointerId)
@@ -170,6 +238,12 @@ export function usePointerCapture({ containerRef, onStrokeStart, onStrokePoint, 
       dispatch(event, 'up', container)
     }
     const handleCancel = (event: PointerEvent) => {
+      if (ignoreTarget?.(event.target)) return
+      if (event.pointerType !== 'pen') {
+        touchPointersRef.current.delete(event.pointerId)
+        if (touchPointersRef.current.size === 0) gestureActiveRef.current = false
+        else if (gestureActiveRef.current) return
+      }
       if (container.hasPointerCapture(event.pointerId)) {
         container.releasePointerCapture(event.pointerId)
       }
@@ -189,8 +263,10 @@ export function usePointerCapture({ containerRef, onStrokeStart, onStrokePoint, 
       container.removeEventListener('pointercancel', handleCancel)
       container.removeEventListener('pointerleave', handleCancel)
       stateRef.current = initialPointerCaptureState
+      touchPointersRef.current.clear()
+      gestureActiveRef.current = false
     }
-  }, [containerRef, disabled, dispatch])
+  }, [containerRef, disabled, dispatch, ignoreTarget])
 }
 
 /** No-op handler kept for components that need a stable React pointer prop without capturing. */

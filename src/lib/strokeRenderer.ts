@@ -1,6 +1,6 @@
 import { getStroke } from 'perfect-freehand'
 
-export type AnnotationTool = 'pen' | 'highlighter' | 'eraser'
+export type AnnotationTool = 'pen' | 'highlighter' | 'eraser' | 'ruler' | 'lasso'
 
 export interface StrokePoint {
   x: number
@@ -15,10 +15,15 @@ export interface Stroke {
   points: StrokePoint[]
 }
 
+// `eraser`, `ruler` and `lasso` are interaction modes, never persisted as a
+// stroke's `tool` (committed strokes are always remapped to `pen`/`highlighter`)
+// — entries kept here only so `Record<AnnotationTool, …>` stays total.
 const TOOL_OPTIONS: Record<AnnotationTool, { thinning: number; smoothing: number; opacity: number }> = {
   pen: { thinning: 0.6, smoothing: 0.5, opacity: 1 },
   highlighter: { thinning: 0.1, smoothing: 0.4, opacity: 0.35 },
   eraser: { thinning: 0.6, smoothing: 0.5, opacity: 1 },
+  ruler: { thinning: 0.6, smoothing: 0.5, opacity: 1 },
+  lasso: { thinning: 0.6, smoothing: 0.5, opacity: 1 },
 }
 
 /** Convert a normalized stroke (0–1 coordinates) into an SVG path `d` attribute, scaled to the container size. */

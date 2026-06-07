@@ -10,7 +10,8 @@ import type { LucideIcon } from 'lucide-react'
 import type { SummaryContent, SummaryResponse } from '@/types/summary'
 import { exportNodeAsPng } from '@/lib/exportImage'
 import { AnnotationCanvas } from '@/components/annotation/AnnotationCanvas'
-import { AnnotationToolbar } from '@/components/annotation/AnnotationToolbar'
+import { AnnotationToolbar, type EraserMode } from '@/components/annotation/AnnotationToolbar'
+import { useAnnotationHistory } from '@/hooks/useAnnotationHistory'
 import { useAnnotationPersistence, type AnnotationSaveStatus } from '@/hooks/useAnnotationPersistence'
 import type { AnnotationTool } from '@/lib/strokeRenderer'
 import { MindMap } from './MindMap'
@@ -359,6 +360,8 @@ function SectionAnnotationArea({ materialId, accessToken, index }: { materialId:
   const [tool, setTool] = useState<AnnotationTool>('pen')
   const [color, setColor] = useState('var(--base-ink)')
   const [width, setWidth] = useState(4)
+  const [eraserMode, setEraserMode] = useState<EraserMode>('object')
+  const [shapeAssist, setShapeAssist] = useState(false)
   const areaRef = useRef<HTMLDivElement | null>(null)
 
   const annotation = useAnnotationPersistence({
@@ -368,10 +371,7 @@ function SectionAnnotationArea({ materialId, accessToken, index }: { materialId:
     accessToken,
     enabled: true,
   })
-
-  function handleUndo() {
-    annotation.onChange(annotation.strokes.slice(0, -1))
-  }
+  const annotationHistory = useAnnotationHistory(annotation.strokes, annotation.onChange)
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -383,8 +383,14 @@ function SectionAnnotationArea({ materialId, accessToken, index }: { materialId:
           onColorChange={setColor}
           width={width}
           onWidthChange={setWidth}
-          onUndo={handleUndo}
-          canUndo={annotation.strokes.length > 0}
+          onUndo={annotationHistory.undo}
+          canUndo={annotationHistory.canUndo}
+          onRedo={annotationHistory.redo}
+          canRedo={annotationHistory.canRedo}
+          eraserMode={eraserMode}
+          onEraserModeChange={setEraserMode}
+          shapeAssist={shapeAssist}
+          onShapeAssistChange={setShapeAssist}
         />
         <SaveStatusLabel status={annotation.status} />
       </div>
@@ -402,10 +408,12 @@ function SectionAnnotationArea({ materialId, accessToken, index }: { materialId:
         {!annotation.loading && (
           <AnnotationCanvas
             value={annotation.strokes}
-            onChange={annotation.onChange}
+            onChange={annotationHistory.onChange}
             tool={tool}
             color={color}
             width={width}
+            eraserMode={eraserMode}
+            shapeAssist={shapeAssist}
           />
         )}
       </div>

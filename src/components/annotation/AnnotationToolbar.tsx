@@ -1,10 +1,12 @@
 'use client'
 
-import { Eraser, Highlighter, Pen, Undo2 } from 'lucide-react'
+import { Eraser, Highlighter, Lasso, Pen, Pipette, Redo2, Ruler, Shapes, Undo2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import type { AnnotationTool } from '@/lib/strokeRenderer'
+
+export type EraserMode = 'object' | 'pixel'
 
 export interface AnnotationToolbarProps {
   tool: AnnotationTool
@@ -15,6 +17,14 @@ export interface AnnotationToolbarProps {
   onWidthChange: (width: number) => void
   onUndo: () => void
   canUndo: boolean
+  onRedo: () => void
+  canRedo: boolean
+  /** Only meaningful while `tool === 'eraser'` — 'object' deletes whole strokes, 'pixel' trims them (Notes' precision eraser). */
+  eraserMode: EraserMode
+  onEraserModeChange: (mode: EraserMode) => void
+  /** "Shape assist" — snaps near-straight/closed strokes into clean lines, circles and rectangles on release, like Notes/Freeform. */
+  shapeAssist: boolean
+  onShapeAssistChange: (enabled: boolean) => void
   className?: string
 }
 
@@ -22,6 +32,13 @@ const TOOLS: ReadonlyArray<{ tool: AnnotationTool; label: string; icon: LucideIc
   { tool: 'pen', label: 'Caneta', icon: Pen },
   { tool: 'highlighter', label: 'Marca-texto', icon: Highlighter },
   { tool: 'eraser', label: 'Borracha', icon: Eraser },
+  { tool: 'ruler', label: 'Régua', icon: Ruler },
+  { tool: 'lasso', label: 'Laço', icon: Lasso },
+]
+
+const ERASER_MODES: ReadonlyArray<{ value: EraserMode; label: string }> = [
+  { value: 'object', label: 'Traço' },
+  { value: 'pixel', label: 'Pixel' },
 ]
 
 // Swatch values are the legible "ink" shade of each palette family — a literal
@@ -38,6 +55,12 @@ const WIDTHS: ReadonlyArray<{ value: number; label: string }> = [
   { value: 4, label: 'Média' },
   { value: 8, label: 'Grossa' },
 ]
+
+// `<input type="color">` requires a #rrggbb value — DS swatches are CSS custom
+// properties, so free-picker selections fall back to this neutral ink tone
+// whenever the active color isn't already a hex string.
+const FREE_COLOR_FALLBACK = '#2B2B2B'
+const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}){1,2}$/
 
 const swatchButtonStyle = (active: boolean): React.CSSProperties => ({
   width: 24,
@@ -67,9 +90,10 @@ const pillButtonStyle = (active: boolean): React.CSSProperties => ({
 })
 
 /**
- * Controls for `AnnotationCanvas` (AC5): tool, color and stroke-width selection,
- * plus undo. Purely presentational — owns no stroke data, so the composing
- * parent (story 3.3) decides how `onUndo` mutates its `strokes` state.
+ * Controls for `AnnotationCanvas` (AC5): tool, color, stroke-width, undo/redo,
+ * eraser precision mode, and shape-assist selection. Purely presentational —
+ * owns no stroke data, so the composing parent (story 3.3) decides how each
+ * callback mutates its `strokes` state.
  */
 export function AnnotationToolbar({
   tool,
@@ -80,8 +104,16 @@ export function AnnotationToolbar({
   onWidthChange,
   onUndo,
   canUndo,
+  onRedo,
+  canRedo,
+  eraserMode,
+  onEraserModeChange,
+  shapeAssist,
+  onShapeAssistChange,
   className,
 }: AnnotationToolbarProps) {
+  const colorInputValue = HEX_COLOR_PATTERN.test(color) ? color : FREE_COLOR_FALLBACK
+
   return (
     <div
       role="toolbar"
@@ -110,7 +142,25 @@ export function AnnotationToolbar({
         ))}
       </div>
 
-      <div role="group" aria-label="Cor" style={{ display: 'flex', gap: 6 }}>
+      {tool === 'eraser' && (
+        <div role="group" aria-label="Modo da borracha" style={{ display: 'flex', gap: 4 }}>
+          {ERASER_MODES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              aria-label={`Borracha por ${label.toLowerCase()}`}
+              aria-pressed={eraserMode === value}
+              title={`Borracha por ${label.toLowerCase()}`}
+              onClick={() => onEraserModeChange(value)}
+              style={pillButtonStyle(eraserMode === value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div role="group" aria-label="Cor" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {COLORS.map(({ value, label }) => (
           <button
             key={value}
@@ -122,6 +172,30 @@ export function AnnotationToolbar({
             style={{ ...swatchButtonStyle(color === value), backgroundColor: value }}
           />
         ))}
+        <label
+          aria-label="Cor personalizada"
+          title="Cor personalizada"
+          style={{
+            ...swatchButtonStyle(!COLORS.some((c) => c.value === color)),
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            backgroundColor: 'var(--base-surface)',
+            color: 'var(--base-ink-soft)',
+          }}
+        >
+          <Pipette size={12} strokeWidth={1.5} aria-hidden="true" />
+          <input
+            type="color"
+            aria-hidden="true"
+            tabIndex={-1}
+            value={colorInputValue}
+            onChange={(event) => onColorChange(event.target.value)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 0, padding: 0 }}
+          />
+        </label>
       </div>
 
       <div role="group" aria-label="Espessura" style={{ display: 'flex', gap: 4 }}>
@@ -151,20 +225,39 @@ export function AnnotationToolbar({
 
       <button
         type="button"
-        aria-label="Desfazer último traço"
-        title="Desfazer"
-        onClick={onUndo}
-        disabled={!canUndo}
-        style={{
-          ...pillButtonStyle(false),
-          marginLeft: 'auto',
-          opacity: canUndo ? 1 : 0.5,
-          cursor: canUndo ? 'pointer' : 'not-allowed',
-        }}
+        aria-label="Assistente de forma"
+        aria-pressed={shapeAssist}
+        title="Assistente de forma — alinha traços em linhas, círculos e retângulos"
+        onClick={() => onShapeAssistChange(!shapeAssist)}
+        style={pillButtonStyle(shapeAssist)}
       >
-        <Undo2 size={16} strokeWidth={1.5} aria-hidden="true" />
-        Desfazer
+        <Shapes size={16} strokeWidth={1.5} aria-hidden="true" />
       </button>
+
+      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <button
+          type="button"
+          aria-label="Desfazer último traço"
+          title="Desfazer"
+          onClick={onUndo}
+          disabled={!canUndo}
+          style={{ ...pillButtonStyle(false), opacity: canUndo ? 1 : 0.5, cursor: canUndo ? 'pointer' : 'not-allowed' }}
+        >
+          <Undo2 size={16} strokeWidth={1.5} aria-hidden="true" />
+          Desfazer
+        </button>
+        <button
+          type="button"
+          aria-label="Refazer último traço desfeito"
+          title="Refazer"
+          onClick={onRedo}
+          disabled={!canRedo}
+          style={{ ...pillButtonStyle(false), opacity: canRedo ? 1 : 0.5, cursor: canRedo ? 'pointer' : 'not-allowed' }}
+        >
+          <Redo2 size={16} strokeWidth={1.5} aria-hidden="true" />
+          Refazer
+        </button>
+      </div>
     </div>
   )
 }

@@ -6,7 +6,8 @@ import { Document, Page, pdfjs } from 'react-pdf'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AnnotationCanvas } from '@/components/annotation/AnnotationCanvas'
-import { AnnotationToolbar } from '@/components/annotation/AnnotationToolbar'
+import { AnnotationToolbar, type EraserMode } from '@/components/annotation/AnnotationToolbar'
+import { useAnnotationHistory } from '@/hooks/useAnnotationHistory'
 import { useAnnotationPersistence, type AnnotationSaveStatus } from '@/hooks/useAnnotationPersistence'
 import { exportNodeAsPng } from '@/lib/exportImage'
 import type { AnnotationTool } from '@/lib/strokeRenderer'
@@ -67,6 +68,8 @@ export function PdfMaterialViewer({
   const [annotationTool, setAnnotationTool] = useState<AnnotationTool>('pen')
   const [annotationColor, setAnnotationColor] = useState('var(--base-ink)')
   const [annotationWidth, setAnnotationWidth] = useState(4)
+  const [eraserMode, setEraserMode] = useState<EraserMode>('object')
+  const [shapeAssist, setShapeAssist] = useState(false)
 
   // Lazy-loaded by anchor (AC6): only the page currently on screen fetches/saves strokes.
   const annotation = useAnnotationPersistence({
@@ -76,6 +79,7 @@ export function PdfMaterialViewer({
     accessToken,
     enabled: Boolean(numPages),
   })
+  const annotationHistory = useAnnotationHistory(annotation.strokes, annotation.onChange)
 
   const matchedPages = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -141,10 +145,6 @@ export function PdfMaterialViewer({
   }
 
   const searchPattern = query.trim() ? new RegExp(`(${escapeRegExp(query.trim())})`, 'gi') : null
-
-  function handleUndoAnnotation() {
-    annotation.onChange(annotation.strokes.slice(0, -1))
-  }
 
   async function handleExportPage() {
     if (!pageWrapperRef.current) return
@@ -250,8 +250,14 @@ export function PdfMaterialViewer({
             onColorChange={setAnnotationColor}
             width={annotationWidth}
             onWidthChange={setAnnotationWidth}
-            onUndo={handleUndoAnnotation}
-            canUndo={annotation.strokes.length > 0}
+            onUndo={annotationHistory.undo}
+            canUndo={annotationHistory.canUndo}
+            onRedo={annotationHistory.redo}
+            canRedo={annotationHistory.canRedo}
+            eraserMode={eraserMode}
+            onEraserModeChange={setEraserMode}
+            shapeAssist={shapeAssist}
+            onShapeAssistChange={setShapeAssist}
           />
           <SaveStatusLabel status={annotation.status} />
         </div>
@@ -294,10 +300,12 @@ export function PdfMaterialViewer({
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <AnnotationCanvas
                     value={annotation.strokes}
-                    onChange={annotation.onChange}
+                    onChange={annotationHistory.onChange}
                     tool={annotationTool}
                     color={annotationColor}
                     width={annotationWidth}
+                    eraserMode={eraserMode}
+                    shapeAssist={shapeAssist}
                   />
                 </div>
               )}
